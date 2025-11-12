@@ -37,11 +37,6 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
 
 
     @Override
-    public boolean supports(SQLStatement statement) {
-        return false;
-    }
-
-    @Override
     public void handle(SQLStatement st,
                                  DbType dialect,
                                  Scope scope,

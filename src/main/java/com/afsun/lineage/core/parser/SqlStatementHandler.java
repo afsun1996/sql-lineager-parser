@@ -7,7 +7,9 @@ import com.afsun.lineage.core.meta.DynamicMetadataProvider;
 import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.ast.SQLStatement;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -21,10 +23,17 @@ public interface SqlStatementHandler {
     /**
      * 判断是否支持处理该类型的SQL语句
      *
-     * @param statement SQL语句AST节点
+     * @param dbType 数据库类型
      * @return 是否支持
      */
-    boolean supports(SQLStatement statement);
+    default boolean supports(DbType dbType) {
+        Set<DbType> dbTypeSet = new HashSet<>();
+        dbTypeSet.add(DbType.mysql);
+        dbTypeSet.add(DbType.odps);
+        dbTypeSet.add(DbType.clickhouse);
+        dbTypeSet.add(DbType.postgresql);
+        return dbTypeSet.contains(dbType);
+    }
 
     /**
      * 处理SQL语句，提取血缘关系

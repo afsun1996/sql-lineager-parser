@@ -4,6 +4,7 @@ import com.afsun.lineage.core.exceptions.InternalParseException;
 import com.afsun.lineage.core.exceptions.MetadataNotFoundException;
 import com.afsun.lineage.core.exceptions.UnsupportedSyntaxException;
 import com.afsun.lineage.core.meta.MetadataProvider;
+import com.alibaba.druid.DbType;
 
 public interface SqlLineageParser {
     /**
@@ -16,5 +17,5 @@ public interface SqlLineageParser {
      * @throws UnsupportedSyntaxException 不支持的SQL语法异常
      * @throws InternalParseException 内部解析异常
      */
-    ParseResult parse(String sqlText, MetadataProvider metadataProvider);
+    ParseResult parse(String sqlText, DbType dbType, MetadataProvider metadataProvider);
 }

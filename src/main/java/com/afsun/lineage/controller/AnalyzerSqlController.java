@@ -72,7 +72,7 @@ public class AnalyzerSqlController {
             String content = new String(file.getBytes(), StandardCharsets.UTF_8);
 
             // 5. 调用解析服务
-            ParseResult result = sqlLineageParseService.parse(content);
+            ParseResult result = sqlLineageParseService.parse(content,null);
 
             log.info("SQL文件解析成功: {}, traceId: {}, 耗时: {}ms",
                 filename, result.getTraceId(), result.getParseMillis());
@@ -120,7 +120,7 @@ public class AnalyzerSqlController {
 
         try {
             // 3. 调用解析服务
-            ParseResult result = sqlLineageParseService.parse(sqlText);
+            ParseResult result = sqlLineageParseService.parse(sqlText,null);
 
             log.info("SQL文本解析成功, traceId: {}, 耗时: {}ms",
                 result.getTraceId(), result.getParseMillis());

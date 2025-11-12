@@ -44,7 +44,7 @@ public class DefaultSqlLineageParser implements SqlLineageParser {
      * @throws InternalParseException 内部解析异常
      */
     @Override
-    public ParseResult parse(String sqlText, MetadataProvider metadataProvider) {
+    public ParseResult parse(String sqlText,DbType dbType, MetadataProvider metadataProvider) {
         long startTime = System.currentTimeMillis();
         String traceId = "LN-" + System.currentTimeMillis();
         List<LineageWarning> warns = new ArrayList<>();
@@ -59,12 +59,20 @@ public class DefaultSqlLineageParser implements SqlLineageParser {
             String cleanedSql = SqlScriptUtils.stripComments(formatSql);
             // 3. 按分号切分多条语句
             List<String> statements = SqlScriptUtils.splitStatements(cleanedSql);
+            if (dbType == null) {
+                //  测方言类型
+                dbType = SqlDialectDetector.detect(statements.get(0));
+                log.debug("解析语句，检测到方言: {}", dbType);
+            }
+            if(!sqlStatementHandler.supports(dbType)){
+                throw new InternalParseException("数据库类型"+dbType.toString()+",暂不支持解析");
+            }
             // 4. 逐条解析语句
             for (String stmtText : statements) {
                 if (stmtText.trim().isEmpty()) {
                     continue;
                 }
-                parseStatement(stmtText, graph, warns, skipped);
+                parseStatement(stmtText,dbType, graph, warns, skipped);
             }
             // 5. 构建成功结果
             return buildResult(traceId, startTime, graph, warns, skipped.get());
@@ -89,12 +97,9 @@ public class DefaultSqlLineageParser implements SqlLineageParser {
     /**
      * 解析单条SQL语句
      */
-    private void parseStatement(String stmtText, LineageGraph graph,
+    private void parseStatement(String stmtText, DbType dialect,LineageGraph graph,
                                  List<LineageWarning> warns, AtomicInteger skipped) {
         try {
-            // 1. 检测方言类型
-            DbType dialect = SqlDialectDetector.detect(stmtText);
-            log.debug("解析语句，检测到方言: {}", dialect);
             // 2. 使用Druid解析SQL
             List<SQLStatement> stmts = SQLUtils.parseStatements(stmtText, dialect);
             // 3. 处理每个AST节点

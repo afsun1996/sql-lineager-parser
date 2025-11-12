@@ -3,6 +3,7 @@ package com.afsun.lineage.neo4j.service;
 import com.afsun.lineage.core.*;
 import com.afsun.lineage.core.meta.MetadataProvider;
 import com.afsun.lineage.service.SqlLineageParseService;
+import com.alibaba.druid.DbType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -21,9 +22,9 @@ public class SqlLineageParseServiceImpl implements SqlLineageParseService {
     private MetadataProvider metadataProvider;
 
     @Override
-    public ParseResult parse(String content) {
+    public ParseResult parse(String content, DbType dbType) {
         SqlLineageParser sqlLineageParser = new DefaultSqlLineageParser();
-        ParseResult parse = sqlLineageParser.parse(content, metadataProvider);
+        ParseResult parse = sqlLineageParser.parse(content,dbType, metadataProvider);
         lineageService.saveLineageGraph(parse.getGraph());
         return parse;
     }

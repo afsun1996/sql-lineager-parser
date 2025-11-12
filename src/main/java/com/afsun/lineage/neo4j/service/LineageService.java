@@ -32,13 +32,10 @@ public class LineageService {
         if (graph == null) {
             return;
         }
-
         // 1. 批量保存Table节点
         saveTables(new ArrayList<>(graph.getTables()));
-
         // 2. 批量保存Column节点和BELONGS_TO关系
         saveColumnsWithBelongsTo(graph.getOwnerEdges());
-
         // 3. 批量创建LINKS_TO关系
         saveColumnLineage(graph.getToEdges());
     }
