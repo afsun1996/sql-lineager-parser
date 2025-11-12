@@ -1,0 +1,45 @@
+server:
+  port: 10080
+
+spring:
+  main:
+    allow-circular-references: true
+  application:
+    name: sql-lineage-analyzer
+  datasource:
+    dynamic:
+      primary: clickhouse
+      datasource:
+        clickhouse:
+          driver-class-name: ru.yandex.clickhouse.ClickHouseDriver
+          url: ${CLICKHOUSE_URL:jdbc:clickhouse://192.168.31.211:30102/default?socket_timeout=10800000}
+          username: ${CLICKHOUSE_USER:default}
+          password: ${CLICKHOUSE_PASSWORD:clickhouse}
+
+#  config:
+#    import: nacos:${spring.application.name}.properties,nacos:middle.properties,nacos:postgresql.properties,nacos:metrics-system-collect.yaml,nacos:metrics-promql.yaml,nacos:metrics-rule-script.yaml,nacos:prometheus-monitor.yaml
+#  cloud:
+#    nacos:
+#      config:
+#        server-addr: 192.168.31.211:30412
+#      discovery:
+#        server-addr: 192.168.31.211:30412
+#      username: nacos
+#      password: nacos
+#    loadbalancer:
+#      nacos:
+#        enabled: true
+  neo4j:
+    uri: ${dfc.middle.neo4j.bolt.uri:bolt://192.168.80.120:7687}
+    authentication:
+      username: ${dfc.middle.neo4j.username:neo4j}
+      password: ${dfc.middle.neo4j.password:password123}
+    pool:
+      # 服务端默认的连接超时时间是5m，https://neo4j.com/docs/operations-manual/4.4/configuration/configuration-settings/ 中的dbms.connector.bolt.thread_pool_keep_alive
+      idle-time-before-connection-test: 3m
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+
+knife4j:
+  enable: true

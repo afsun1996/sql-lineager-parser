@@ -1,0 +1,455 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.6.1</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.afsun.lineage</groupId>
+    <artifactId>sql-lineager-parser</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <properties>
+        <commons.lang3.version>3.12.0</commons.lang3.version>
+        <java.version>1.8</java.version>
+        <spring-cloud.version>2021.0.8</spring-cloud.version>
+         <java.version>1.8</java.version>
+        <maven.compiler.source>${java.version}</maven.compiler.source>
+        <maven.compiler.target>${java.version}</maven.compiler.target>
+        <registry>60.60.60.208:15000</registry>
+        <LOG_DIR>/metrics</LOG_DIR>
+        <image>${registry}/metrics-analyzer/${project.artifactId}:${project.version}</image>
+        <revision>1.0.0-SNAPSHOT</revision>
+        <!--依赖组件版本-->
+        <poi.version>5.2.0</poi.version>
+        <druid.datasource.version>1.2.18</druid.datasource.version>
+        <dfc.module.version>0.0.1-SNAPSHOT</dfc.module.version>
+        <commons.lang3.version>3.12.0</commons.lang3.version>
+        <commons.collections4.version>4.4</commons.collections4.version>
+        <spring-cloud.version>2021.0.5</spring-cloud.version>
+        <jib-maven-plugin.version>3.3.1</jib-maven-plugin.version>
+        <spring-doc.version>1.6.8</spring-doc.version>
+        <mybatis.plus.version>3.5.1</mybatis.plus.version>
+        <flatten-maven-plugin.version>1.2.5</flatten-maven-plugin.version>
+        <findbugs-maven-plugin.version>3.0.5</findbugs-maven-plugin.version>
+        <fastjson.version>1.2.70</fastjson.version>
+        <redisson.version>3.30.0</redisson.version>
+        <aviator.version>5.3.3</aviator.version>
+        <json-lib.version>2.4</json-lib.version>
+        <pagehelper-spring.version>1.4.2</pagehelper-spring.version>
+        <pagehelper-version>5.3.0</pagehelper-version>
+        <jsoup.version>1.11.3</jsoup.version>
+        <easypoi.version>4.3.0</easypoi.version>
+        <dynamic.mybatis.plus.version>4.3.1</dynamic.mybatis.plus.version>
+        <spring-cloud-alibaba.version>2021.0.5.0</spring-cloud-alibaba.version>
+        <docker-maven-plugin.version>0.42.0</docker-maven-plugin.version>
+        <maven-shade-plugin.version>3.3.0</maven-shade-plugin.version>
+        <proguard-maven-plugin.version>2.6.0</proguard-maven-plugin.version>
+        <proguard.version>7.2.2</proguard.version>
+        <bouncycastle.version>1.69</bouncycastle.version>
+        <druid-spring-boot-starter.version>1.2.18</druid-spring-boot-starter.version>
+        <fasterxml.jackson.version>2.13.2</fasterxml.jackson.version>
+        <xxl-job.version>2.4.0</xxl-job.version>
+        <easyexcel.version>3.2.1</easyexcel.version>
+        <neo4j.version>4.3.6.0</neo4j.version>
+        <scala.binary.version>2.12</scala.binary.version>
+        <knife4j-openapi3-spring-boot.version>4.3.0</knife4j-openapi3-spring-boot.version>
+        <strimzi.version>0.39.0</strimzi.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+             <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-data-neo4j</artifactId>
+                 <version>2.6.1</version>
+            </dependency>
+
+           <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>dynamic-datasource-spring-boot-starter</artifactId>
+                <version>${dynamic.mybatis.plus.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.neo4j.driver</groupId>
+                <artifactId>neo4j-java-driver-spring-boot-starter</artifactId>
+                <version>${neo4j.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
+                <version>2.6.1</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-data-mongodb</artifactId>
+                <version>2.6.1</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-data-neo4j</artifactId>
+                <version>2.6.1</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-web</artifactId>
+                <version>2.6.1</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.kafka</groupId>
+                <artifactId>spring-kafka</artifactId>
+                <version>2.6.1</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>${commons.lang3.version}</version>
+            </dependency>
+
+<dependency>
+                <groupId>ru.yandex.clickhouse</groupId>
+                <artifactId>clickhouse-jdbc</artifactId>
+                <version>0.3.2</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.poi</groupId>
+                <artifactId>poi</artifactId>
+                <version>${poi.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.poi</groupId>
+                <artifactId>poi-ooxml</artifactId>
+                <version>${poi.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.poi</groupId>
+                <artifactId>poi-ooxml-full</artifactId>
+                <version>${poi.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.poi</groupId>
+                <artifactId>poi-scratchpad</artifactId>
+                <version>${poi.version}</version>
+            </dependency>
+            <!-- 对应poi的5.2.0-->
+            <dependency>
+                <groupId>fr.opensagres.xdocreport</groupId>
+                <artifactId>fr.opensagres.poi.xwpf.converter.pdf-gae</artifactId>
+                <version>2.0.3</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.googlecode.aviator</groupId>
+                <artifactId>aviator</artifactId>
+                <version>${aviator.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.dfc.metricsanalyzer</groupId>
+                <artifactId>metrics-analyzer-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.dfc.metricsanalyzer</groupId>
+                <artifactId>metrics-analyzer-common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.dfc.metricsanalyzer</groupId>
+                <artifactId>metrics-analyzer-dao</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+                <version>${spring-cloud-alibaba.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.redisson</groupId>
+                <artifactId>redisson-spring-boot-starter</artifactId>
+                <version>${redisson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.redisson</groupId>
+                <artifactId>redisson-spring-data-26</artifactId>
+                <version>${redisson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>net.sf.json-lib</groupId>
+                <artifactId>json-lib</artifactId>
+                <version>${json-lib.version}</version>
+                <classifier>jdk15</classifier>
+            </dependency>
+            <dependency>
+                <groupId>com.github.pagehelper</groupId>
+                <artifactId>pagehelper-spring-boot-starter</artifactId>
+                <version>${pagehelper-spring.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.pagehelper</groupId>
+                <artifactId>pagehelper</artifactId>
+                <version>${pagehelper-version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.dfc</groupId>
+                <artifactId>RsaTool</artifactId>
+                <version>${dfc.module.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jsoup</groupId>
+                <artifactId>jsoup</artifactId>
+                <version>${jsoup.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>cn.afterturn</groupId>
+                <artifactId>easypoi-base</artifactId>
+                <version>${easypoi.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.afterturn</groupId>
+                <artifactId>easypoi-web</artifactId>
+                <version>${easypoi.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.afterturn</groupId>
+                <artifactId>easypoi-annotation</artifactId>
+                <version>${easypoi.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.guardsquare</groupId>
+                <artifactId>proguard-base</artifactId>
+                <version>${proguard.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcprov-jdk15on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcpkix-jdk15on</artifactId>
+                <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>${fasterxml.jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${fasterxml.jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.dataformat</groupId>
+                <artifactId>jackson-dataformat-yaml</artifactId>
+                <version>${fasterxml.jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.datatype</groupId>
+                <artifactId>jackson-datatype-jsr310</artifactId>
+                <version>${fasterxml.jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-core</artifactId>
+                <version>${fasterxml.jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>easyexcel</artifactId>
+                <version>${easyexcel.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>easyexcel-core</artifactId>
+                <version>${easyexcel.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.xiaoymin</groupId>
+                <artifactId>knife4j-openapi3-spring-boot-starter</artifactId>
+                <version>${knife4j-openapi3-spring-boot.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+            </dependency>
+            <!-- Apache Flink dependencies -->
+            <dependency>
+                <groupId>io.strimzi</groupId>
+                <artifactId>api</artifactId>
+                <version>${strimzi.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+     <dependencies>
+
+         <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-data-neo4j</artifactId>
+            </dependency>
+
+            <dependency>
+                <groupId>org.neo4j.driver</groupId>
+                <artifactId>neo4j-java-driver-spring-boot-starter</artifactId>
+            </dependency>
+
+         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+
+         <!--        <dependency>-->
+         <!--            <groupId>com.googlecode.aviator</groupId>-->
+         <!--            <artifactId>aviator</artifactId>-->
+         <!--        </dependency>-->
+
+         <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+
+         <!--        <dependency>-->
+         <!--            <groupId>com.alibaba.cloud</groupId>-->
+         <!--            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>-->
+         <!--        </dependency>-->
+
+         <!--        <dependency>-->
+         <!--            <groupId>com.alibaba.cloud</groupId>-->
+         <!--            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>-->
+         <!--            <version>2021.0.5.0</version>-->
+         <!--        </dependency>-->
+
+         <!--        <dependency>-->
+         <!--            <groupId>org.springframework.cloud</groupId>-->
+         <!--            <artifactId>spring-cloud-starter-loadbalancer</artifactId>-->
+         <!--        </dependency>-->
+
+         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>dynamic-datasource-spring-boot-starter</artifactId>
+        </dependency>
+         <!--clickhouse-->
+
+         <dependency>
+            <groupId>ru.yandex.clickhouse</groupId>
+            <artifactId>clickhouse-jdbc</artifactId>
+            <version>0.3.2</version>
+        </dependency>
+         <!--        <dependency>-->
+         <!--            <groupId>com.alibaba</groupId>-->
+         <!--            <artifactId>druid-spring-boot-starter</artifactId>-->
+         <!--            <version>${druid.datasource.version}</version>-->
+         <!--        </dependency>-->
+
+
+         <!--        <dependency>-->
+         <!--            <groupId>com.github.xiaoymin</groupId>-->
+         <!--            <artifactId>knife4j-openapi3-spring-boot-starter</artifactId>-->
+         <!--        </dependency>-->
+
+         <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>druid</artifactId>
+            <version>1.2.8</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.30</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>1.7.32</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.alibaba.fastjson2</groupId>
+            <artifactId>fastjson2</artifactId>
+            <version>2.0.33</version>
+        </dependency>
+
+         <!--junit 测试-->
+         <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+             <!--            <scope>test</scope>-->
+        </dependency>
+
+         <!--junit 测试-->
+         <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>5.6.1</version>
+        </dependency>
+
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-collections4</artifactId>
+            <version>4.4</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
