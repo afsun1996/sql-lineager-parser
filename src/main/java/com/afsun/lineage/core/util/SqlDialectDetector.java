@@ -60,7 +60,7 @@ public class SqlDialectDetector {
 
         // 6. 默认使用MySQL（最通用）
         log.debug("使用默认MySQL方言");
-        return DbType.mysql;
+        return DbType.clickhouse;
     }
 
     /**

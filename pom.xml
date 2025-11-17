@@ -12,7 +12,7 @@
     <groupId>com.afsun.lineage</groupId>
     <artifactId>sql-lineager-parser</artifactId>
     <version>1.0.0-SNAPSHOT</version>
-    <packaging>pom</packaging>
+    <packaging>jar</packaging>
 
     <properties>
         <commons.lang3.version>3.12.0</commons.lang3.version>
@@ -22,7 +22,7 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <registry>60.60.60.208:15000</registry>
-        <LOG_DIR>/metrics</LOG_DIR>
+        <LOG_DIR>/sql-parser</LOG_DIR>
         <image>${registry}/metrics-analyzer/${project.artifactId}:${project.version}</image>
         <revision>1.0.0-SNAPSHOT</revision>
         <!--依赖组件版本-->
@@ -114,7 +114,7 @@
                 <version>${commons.lang3.version}</version>
             </dependency>
 
-<dependency>
+            <dependency>
                 <groupId>ru.yandex.clickhouse</groupId>
                 <artifactId>clickhouse-jdbc</artifactId>
                 <version>0.3.2</version>
@@ -369,11 +369,18 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>com.baomidou</groupId>
-            <artifactId>dynamic-datasource-spring-boot-starter</artifactId>
-        </dependency>
+
+         <!--        <dependency>-->
+         <!--            <groupId>com.baomidou</groupId>-->
+         <!--            <artifactId>dynamic-datasource-spring-boot-starter</artifactId>-->
+         <!--        </dependency>-->
          <!--clickhouse-->
+
+
+         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
 
          <dependency>
             <groupId>ru.yandex.clickhouse</groupId>
@@ -444,10 +451,133 @@
     </dependencies>
 
     <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>repackage</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${maven-compiler-plugin.version}</version>
+                    <configuration>
+                        <source>${java.version}</source>
+                        <target>${java.version}</target>
+                        <encoding>${project.reporting.outputEncoding}</encoding>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${maven-surefire-plugin.version}</version>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>findbugs-maven-plugin</artifactId>
+                    <version>${findbugs-maven-plugin.version}</version>
+                    <configuration>
+                        <threshold>High</threshold>
+                        <effort>Default</effort>
+                        <findbugsXmlOutput>true</findbugsXmlOutput>
+                        <xmlOutput>true</xmlOutput>
+                        <findbugsXmlOutputDirectory>target/site</findbugsXmlOutputDirectory>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>versions-maven-plugin</artifactId>
+                    <version>${versions-maven-plugin.version}</version>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.sonarsource.scanner.maven</groupId>
+                    <artifactId>sonar-maven-plugin</artifactId>
+                    <version>${sonar-maven-plugin.version}</version>
+                </plugin>
+
+                <plugin>
+                    <groupId>com.google.cloud.tools</groupId>
+                    <artifactId>jib-maven-plugin</artifactId>
+                </plugin>
+
+            </plugins>
+        </pluginManagement>
+ <finalName>${project.name}-${project.version}</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <includeSystemScope>true</includeSystemScope>
+                </configuration>
+                <version>2.7.5</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>com.google.cloud.tools</groupId>
+                <artifactId>jib-maven-plugin</artifactId>
+                <version>${jib-maven-plugin.version}</version>
+                <configuration>
+                    <from>
+                        <image>
+                            ${registry}/openjdk:8-jre-alpine3.8-dfc@sha256:c1b9a1fb26296661037f424bd02c97263946431ce35eea146143ec18a28ecd6f
+                        </image>
+                    </from>
+                    <allowInsecureRegistries>true</allowInsecureRegistries>
+                    <container>
+                        <environment>
+                            <LOG_DIR>${LOG_DIR}</LOG_DIR>
+                        </environment>
+                        <volumes>
+                            <volume>${LOG_DIR}</volume>
+                        </volumes>
+                        <entrypoint>/app/start.sh</entrypoint>
+                        <mainClass>com.dfc.rbl.RedBlackListApplication</mainClass>
+                    </container>
+                    <extraDirectories>
+                        <paths>
+                            <path>
+                                <from>src/main/script</from>
+                                <into>/app</into>
+                            </path>
+                        </paths>
+                        <permissions>
+                            <permission>
+                                <file>/app/start.sh</file>
+                                <mode>755</mode>
+                            </permission>
+                        </permissions>
+                    </extraDirectories>
+                </configuration>
             </plugin>
         </plugins>
     </build>

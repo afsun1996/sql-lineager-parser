@@ -209,7 +209,7 @@ public class DefaultExpressionResolver implements ExpressionResolver {
                         expandStar(null, scope, metadata, warns, out);
                     } else if (expr instanceof SQLPropertyExpr) {
                         SQLPropertyExpr pe = (SQLPropertyExpr) expr;
-                        if ("".equals(pe.getName()) || (pe.getName() == null || pe.getName().isEmpty())) {
+                        if ("*".equals(pe.getName())) {
                             String qualifier = pe.getOwner() == null ? null : pe.getOwner().toString();
                             expandStar(qualifier, scope, metadata, warns, out);
                         } else {
@@ -268,9 +268,20 @@ public class DefaultExpressionResolver implements ExpressionResolver {
             return;
         }
         if (from instanceof SQLSubqueryTableSource) {
-            SQLSubqueryTableSource sqlSubqueryTableSource = (SQLSubqueryTableSource) from;
-            SQLSelectQueryBlock query = (SQLSelectQueryBlock) sqlSubqueryTableSource.getSelect().getQuery();
-            bindFrom(query.getFrom(), scope, warns);
+            SQLSubqueryTableSource subTS = (SQLSubqueryTableSource) from;
+            String subAlias = safeLower(subTS.getAlias());
+
+            if (subAlias == null || subAlias.isEmpty()) {
+                warns.add(LineageWarning.of("SUBQUERY_NO_ALIAS",
+                        "子查询缺少别名", "FROM", "请为子查询提供别名"));
+                return;
+            }
+
+            // 创建独立的子查询作用域，避免污染外层scope
+            // 注意：这里只是简单处理，不将子查询的FROM表绑定到外层scope
+            // 子查询应该作为一个虚拟表注册到外层scope
+            TableName virtualTable = TableName.of(null, null, subAlias, null, null, subAlias);
+            scope.addTableAlias(subAlias, virtualTable);
             return;
         }
 

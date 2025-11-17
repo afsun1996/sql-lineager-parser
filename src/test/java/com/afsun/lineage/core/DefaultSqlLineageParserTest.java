@@ -46,7 +46,7 @@ class DefaultSqlLineageParserTest {
     @Test
     void testSimpleSelect() {
         String sql = "SELECT id, name FROM test_db.users";
-        ParseResult result = parser.parse(sql, mockMetadata);
+        ParseResult result = parser.parse(sql, null, mockMetadata);
 
         assertNotNull(result);
         assertNotNull(result.getGraph());
@@ -56,7 +56,7 @@ class DefaultSqlLineageParserTest {
     @Test
     void testInsertSelect() {
         String sql = "INSERT INTO test_db.users(id, name) SELECT order_id, user_id FROM test_db.orders";
-        ParseResult result = parser.parse(sql, mockMetadata);
+        ParseResult result = parser.parse(sql, null, mockMetadata);
 
         assertNotNull(result);
         assertEquals(2, result.getGraph().getTables().size());
@@ -66,7 +66,7 @@ class DefaultSqlLineageParserTest {
     @Test
     void testCreateTableAsSelect() {
         String sql = "CREATE TABLE test_db.new_table AS SELECT id, name FROM test_db.users";
-        ParseResult result = parser.parse(sql, mockMetadata);
+        ParseResult result = parser.parse(sql, null, mockMetadata);
 
         assertNotNull(result);
         assertTrue(result.getGraph().getTables().size() >= 2);
@@ -76,21 +76,21 @@ class DefaultSqlLineageParserTest {
     void testMetadataNotFound() {
         String sql = "SELECT * FROM non_existent_table";
         assertThrows(MetadataNotFoundException.class, () -> {
-            parser.parse(sql, mockMetadata);
+            parser.parse(sql, null, mockMetadata);
         });
     }
 
     @Test
     void testEmptySQL() {
         String sql = "";
-        ParseResult result = parser.parse(sql, mockMetadata);
+        ParseResult result = parser.parse(sql, null, mockMetadata);
         assertNotNull(result);
     }
 
     @Test
     void testMultipleStatements() {
         String sql = "SELECT id FROM test_db.users; SELECT order_id FROM test_db.orders;";
-        ParseResult result = parser.parse(sql, mockMetadata);
+        ParseResult result = parser.parse(sql, null, mockMetadata);
 
         assertNotNull(result);
         assertEquals(2, result.getGraph().getTables().size());
@@ -99,7 +99,7 @@ class DefaultSqlLineageParserTest {
     @Test
     void testSQLWithComments() {
         String sql = "-- This is a comment\nSELECT id, name FROM test_db.users /* inline comment */";
-        ParseResult result = parser.parse(sql, mockMetadata);
+        ParseResult result = parser.parse(sql, null, mockMetadata);
 
         assertNotNull(result);
         assertTrue(result.getGraph().getTables().size() > 0);

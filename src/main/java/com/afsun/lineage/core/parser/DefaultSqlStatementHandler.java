@@ -33,17 +33,18 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
 
     private DynamicMetadataProvider dynamicMetadataProvider;
 
-    public DefaultSqlStatementHandler() {}
+    public DefaultSqlStatementHandler() {
+    }
 
 
     @Override
     public void handle(SQLStatement st,
-                                 DbType dialect,
-                                 Scope scope,
-                                 LineageGraph graph,
-                                 DynamicMetadataProvider metadata,
-                                 List<LineageWarning> warns,
-                                 AtomicInteger skipped) {
+                       DbType dialect,
+                       Scope scope,
+                       LineageGraph graph,
+                       DynamicMetadataProvider metadata,
+                       List<LineageWarning> warns,
+                       AtomicInteger skipped) {
         dynamicMetadataProvider = metadata;
         // ===== 新增:处理DROP TABLE =====
         if (st instanceof SQLDropTableStatement) {
@@ -72,13 +73,9 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
         // ===== 新增:提取WITH子句 =====
         if (st instanceof SQLSelectStatement) {
             SQLSelectStatement selectStmt = (SQLSelectStatement) st;
-            SQLSelectQuery query = selectStmt.getSelect().getQuery();
-            // 处理CTE
-            if (query instanceof SQLInsertStatement) {
-                SQLInsertStatement qb = (SQLInsertStatement) query;
-                if (qb.getWith() != null) {
-                    processWith(qb.getWith(), scope, graph, metadata, warns);
-                }
+            SQLWithSubqueryClause withClause = selectStmt.getSelect().getWithSubQuery();
+            if (withClause != null) {
+                processWith(withClause, scope, graph, metadata, warns);
             }
             handleSelect(selectStmt.getSelect(), null, scope, graph, metadata, warns);
             return;
@@ -195,10 +192,10 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
             String alias = safeLower(item.getAlias()); // 输出列别名
             SQLExpr expr = item.getExpr();
 
-            // 2.1 星号展开（* 或 t.）
+            // 2.1 星号展开（* 或 t.*）
             if (expr instanceof SQLAllColumnExpr) {
                 outputs.addAll(expandStar(null, scope, metadata, graph, warns));
-            } else if (expr instanceof SQLPropertyExpr && "".equals(((SQLPropertyExpr) expr).getName())) {
+            } else if (expr instanceof SQLPropertyExpr && "*".equals(((SQLPropertyExpr) expr).getName())) {
                 String qualifier = ((SQLPropertyExpr) expr).getOwner().toString();
                 outputs.addAll(expandStar(qualifier, scope, metadata, graph, warns));
             } else {
@@ -574,6 +571,11 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
                     "INSERT VALUES 不解析列级血缘", positionOf(ins), "如需列级血缘请改为 INSERT ... SELECT"));
             return;
         }
+        // ===== 处理 INSERT ... WITH ... SELECT 中的 WITH 子句 =====
+        SQLWithSubqueryClause withClause = ins.getQuery().getWithSubQuery();
+        if (withClause != null) {
+            processWith(withClause, scope, graph, metadata, warns);
+        }
         handleSelect(ins.getQuery(), target, scope, graph, metadata, warns);
     }
 
@@ -641,7 +643,6 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
             scope.putCTE(cteName, entry.getSubQuery().toString());
         }
     }
-
 
 
     private void handleMerge(SQLMergeStatement mg,

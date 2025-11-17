@@ -2,6 +2,7 @@ package com.afsun.lineage.core.meta;
 
 import com.afsun.lineage.core.ColumnRef;
 import com.afsun.lineage.vo.TableKey;
+import com.clickhouse.jdbc.ClickHouseDataSource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
@@ -10,6 +11,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.Resource;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -24,7 +27,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class ClickHouseMetadataProvider implements MetadataProvider, ApplicationRunner {
 
-    private final JdbcTemplate jdbcTemplate;
+    @Resource
+    private JdbcTemplate jdbcTemplate;
 
     /**
      * 元数据缓存：表 -> 列清单
@@ -43,16 +47,24 @@ public class ClickHouseMetadataProvider implements MetadataProvider, Application
     private volatile int totalTables = 0;
     private volatile int totalColumns = 0;
 
-    @Autowired
-    public ClickHouseMetadataProvider(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     /**
      * 应用启动时自动加载元数据
      */
     @Override
     public void run(ApplicationArguments args) {
+        Properties properties = new Properties();
+        properties.setProperty("driverClassName", "ru.yandex.clickhouse.ClickHouseDriver");
+        properties.setProperty("url", "jdbc:clickhouse://192.168.31.211:30102/default?socket_timeout=10800000");
+        properties.setProperty("username", "default");
+        properties.setProperty("password", "clickhouse");
+        ClickHouseDataSource clickHouseDataSource = null;
+        try {
+            clickHouseDataSource = new ClickHouseDataSource("jdbc:clickhouse://192.168.31.211:30102/default?socket_timeout=10800000",properties);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        jdbcTemplate.setDataSource(clickHouseDataSource);
         log.info("应用启动，开始加载ClickHouse元数据...");
         reload();
     }

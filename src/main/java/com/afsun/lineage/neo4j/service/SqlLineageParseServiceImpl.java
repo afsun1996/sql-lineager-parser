@@ -25,7 +25,7 @@ public class SqlLineageParseServiceImpl implements SqlLineageParseService {
     public ParseResult parse(String content, DbType dbType) {
         SqlLineageParser sqlLineageParser = new DefaultSqlLineageParser();
         ParseResult parse = sqlLineageParser.parse(content,dbType, metadataProvider);
-        lineageService.saveLineageGraph(parse.getGraph());
+//        lineageService.saveLineageGraph(parse.getGraph());
         return parse;
     }
 }

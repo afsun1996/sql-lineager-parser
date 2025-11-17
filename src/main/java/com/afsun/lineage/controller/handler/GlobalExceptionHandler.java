@@ -1,4 +1,4 @@
-package com.afsun.lineage.controller;
+package com.afsun.lineage.controller.handler;
 
 import com.afsun.lineage.core.exceptions.InternalParseException;
 import com.afsun.lineage.core.exceptions.MetadataNotFoundException;
