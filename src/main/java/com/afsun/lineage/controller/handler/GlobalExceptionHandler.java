@@ -27,7 +27,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MetadataNotFoundException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Response<Void> handleMetadataNotFoundException(MetadataNotFoundException e) {
-        log.warn("元数据未找到: {}", e.getMessage());
+        log.error("元数据未找到: {}", e.getMessage());
         return Response.fail(400, "元数据缺失: " + e.getMessage() +
                            "\n建议：1) 检查表名是否正确 2) 调用 /metadata/reload 刷新元数据");
     }
@@ -38,7 +38,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UnsupportedSyntaxException.class)
     @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
     public Response<Void> handleUnsupportedSyntaxException(UnsupportedSyntaxException e) {
-        log.warn("不支持的SQL语法: {}", e.getMessage());
+        log.error("不支持的SQL语法: {}", e.getMessage());
         return Response.fail(422, "不支持的SQL语法: " + e.getMessage() +
                            "\n建议：1) 简化SQL语句 2) 拆分为多个简单语句 3) 查看文档了解支持的语法");
     }
@@ -60,7 +60,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     @ResponseStatus(HttpStatus.PAYLOAD_TOO_LARGE)
     public Response<Void> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException e) {
-        log.warn("文件上传大小超限: {}", e.getMessage());
+        log.error("文件上传大小超限: {}", e.getMessage());
         return Response.fail(413, "文件大小超过限制，请上传较小的文件或使用文本接口");
     }
 
@@ -70,7 +70,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Response<Void> handleIllegalArgumentException(IllegalArgumentException e) {
-        log.warn("非法参数: {}", e.getMessage());
+        log.error("非法参数: {}", e.getMessage());
         return Response.fail(400, "参数错误: " + e.getMessage());
     }
 

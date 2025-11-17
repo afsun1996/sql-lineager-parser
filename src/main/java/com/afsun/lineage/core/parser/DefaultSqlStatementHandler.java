@@ -195,7 +195,11 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
             // 2.1 星号展开（* 或 t.*）
             if (expr instanceof SQLAllColumnExpr) {
                 outputs.addAll(expandStar(null, scope, metadata, graph, warns));
-            } else if (expr instanceof SQLPropertyExpr && "*".equals(((SQLPropertyExpr) expr).getName())) {
+            }  else if (expr instanceof SQLIdentifierExpr) {
+                SQLIdentifierExpr sqlExpr = (SQLIdentifierExpr) expr;
+                outputs.addAll(expandStar(sqlExpr.getName(), scope, metadata, null, warns));
+            }
+            else if (expr instanceof SQLPropertyExpr && "*".equals(((SQLPropertyExpr) expr).getName())) {
                 String qualifier = ((SQLPropertyExpr) expr).getOwner().toString();
                 outputs.addAll(expandStar(qualifier, scope, metadata, graph, warns));
             } else {
@@ -204,9 +208,7 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
                 // 推断输出列名：优先别名；否则尝试从标识/属性表达式获取名称；实在没有则生成 col_{idx}
                 String outName = alias;
                 if (outName == null) {
-                    if (expr instanceof SQLIdentifierExpr) {
-                        outName = safeLower(((SQLIdentifierExpr) expr).getName());
-                    } else if (expr instanceof SQLPropertyExpr) {
+                    if (expr instanceof SQLPropertyExpr) {
                         outName = safeLower(((SQLPropertyExpr) expr).getName());
                     } else {
                         outName = "col_" + idx;
@@ -370,17 +372,20 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
             SQLExpr expr = item.getExpr();
             String alias = safeLower(item.getAlias());
             if (expr instanceof SQLAllColumnExpr) {
+                SQLAllColumnExpr sqlExpr = (SQLAllColumnExpr) expr;
                 outputs.addAll(expandStar(null, scope, metadata, null, warns));
-            } else if (expr instanceof SQLPropertyExpr && "*".equals(((SQLPropertyExpr) expr).getName())) {
+            } else if (expr instanceof SQLIdentifierExpr) {
+                SQLIdentifierExpr sqlExpr = (SQLIdentifierExpr) expr;
+                outputs.addAll(expandStar(sqlExpr.getName(), scope, metadata, null, warns));
+            }
+            else if (expr instanceof SQLPropertyExpr && "*".equals(((SQLPropertyExpr) expr).getName())) {
                 String qualifier = ((SQLPropertyExpr) expr).getOwner().toString();
                 outputs.addAll(expandStar(qualifier, scope, metadata, null, warns));
             } else {
                 List<ColumnRef> sources = exprResolver.resolve(expr, scope, metadata, warns);
                 String outName = alias;
                 if (outName == null) {
-                    if (expr instanceof SQLIdentifierExpr) {
-                        outName = safeLower(((SQLIdentifierExpr) expr).getName());
-                    } else if (expr instanceof SQLPropertyExpr) {
+                    if (expr instanceof SQLPropertyExpr) {
                         outName = safeLower(((SQLPropertyExpr) expr).getName());
                     } else {
                         outName = "col_" + idx;
@@ -415,19 +420,21 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
             SQLSubqueryTableSource subTS = (SQLSubqueryTableSource) from;
             String subAlias = safeLower(subTS.getAlias());
 
+            // 如果子查询没有别名，生成一个默认别名（用于INSERT SELECT场景）
             if (subAlias == null || subAlias.isEmpty()) {
+                subAlias = "__subquery_" + System.currentTimeMillis();
                 warns.add(LineageWarning.of("SUBQUERY_NO_ALIAS",
-                        "子查询缺少别名", positionOf(subTS), "请为子查询提供别名"));
-                return;
+                        "子查询缺少别名，已自动生成: " + subAlias,
+                        positionOf(subTS), "建议为子查询提供显式别名"));
             }
+
             // 1. 创建子查询专用Scope(隔离作用域)
             Scope subScope = new Scope();
-
-            //fixme 元数据对象是否应该放入？
 
             // 2. 收集子查询输出列
             List<SelectOutput> subOutputs = collectSelectOutputs(
                     subTS.getSelect().getQuery(), subScope, dynamicMetadataProvider, null, warns);
+
             // 3. 将子查询输出列注册为虚拟表到父Scope
             TableName virtualTable = TableName.of(null, null, subAlias, null, null, subAlias);
             scope.addTableAlias(subAlias, virtualTable);
@@ -436,6 +443,17 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
             for (SelectOutput out : subOutputs) {
                 scope.addSubqueryColumn(subAlias, out.getOutputName(), out.getSources());
             }
+
+            // 5. 将子查询也注册到动态元数据提供者
+            List<ColumnRef> subColumns = new ArrayList<>();
+            for (SelectOutput out : subOutputs) {
+                ColumnRef col = ColumnRef.of(
+                        null, null, subAlias, out.getOutputName(),
+                        null, null, subAlias, out.getOutputName()
+                );
+                subColumns.add(col);
+            }
+            dynamicMetadataProvider.registerTempTable(null, null, subAlias, subColumns);
 
             return;
         }
@@ -626,18 +644,31 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
         for (SQLWithSubqueryClause.Entry entry : with.getEntries()) {
             String cteName = safeLower(entry.getAlias());
             if (cteName == null) continue;
-            // 递归处理CTE定义
+
+            // 递归处理CTE定义 - 使用独立的scope但共享metadata
             Scope cteScope = new Scope();
             List<SelectOutput> cteOutputs = collectSelectOutputs(
                     entry.getSubQuery().getQuery(), cteScope, metadata, graph, warns);
-            // 将CTE注册为虚拟表
+
+            // 将CTE注册为虚拟表到父scope
             TableName virtualTable = TableName.of(null, null, cteName, null, null, cteName);
             scope.addTableAlias(cteName, virtualTable);
 
-            // 注册CTE列
+            // 注册CTE列到父scope
             for (SelectOutput out : cteOutputs) {
                 scope.addSubqueryColumn(cteName, out.getOutputName(), out.getSources());
             }
+
+            // 将CTE也注册到动态元数据提供者，以便后续查询可以获取其列信息
+            List<ColumnRef> cteColumns = new ArrayList<>();
+            for (SelectOutput out : cteOutputs) {
+                ColumnRef col = ColumnRef.of(
+                        null, null, cteName, out.getOutputName(),
+                        null, null, cteName, out.getOutputName()
+                );
+                cteColumns.add(col);
+            }
+            metadata.registerTempTable(null, null, cteName, cteColumns);
 
             // 记录CTE文本(可选)
             scope.putCTE(cteName, entry.getSubQuery().toString());

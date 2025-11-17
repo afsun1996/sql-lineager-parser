@@ -5,6 +5,9 @@ import com.afsun.lineage.core.exceptions.UnsupportedSyntaxException;
 import com.afsun.lineage.core.meta.MetadataProvider;
 import com.afsun.lineage.graph.ColumnNode;
 import com.afsun.lineage.graph.TableNode;
+import com.alibaba.druid.DbType;
+import com.alibaba.druid.sql.SQLUtils;
+import com.alibaba.druid.sql.ast.SQLStatement;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -102,6 +105,6 @@ class DefaultSqlLineageParserTest {
         ParseResult result = parser.parse(sql, null, mockMetadata);
 
         assertNotNull(result);
-        assertTrue(result.getGraph().getTables().size() > 0);
+        assertTrue(!result.getGraph().getTables().isEmpty());
     }
 }

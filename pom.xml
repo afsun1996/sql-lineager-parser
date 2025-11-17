@@ -18,7 +18,7 @@
         <commons.lang3.version>3.12.0</commons.lang3.version>
         <java.version>1.8</java.version>
         <spring-cloud.version>2021.0.8</spring-cloud.version>
-         <java.version>1.8</java.version>
+        <java.version>1.8</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <registry>60.60.60.208:15000</registry>
@@ -27,7 +27,6 @@
         <revision>1.0.0-SNAPSHOT</revision>
         <!--依赖组件版本-->
         <poi.version>5.2.0</poi.version>
-        <druid.datasource.version>1.2.18</druid.datasource.version>
         <dfc.module.version>0.0.1-SNAPSHOT</dfc.module.version>
         <commons.lang3.version>3.12.0</commons.lang3.version>
         <commons.collections4.version>4.4</commons.collections4.version>
@@ -52,7 +51,6 @@
         <proguard-maven-plugin.version>2.6.0</proguard-maven-plugin.version>
         <proguard.version>7.2.2</proguard.version>
         <bouncycastle.version>1.69</bouncycastle.version>
-        <druid-spring-boot-starter.version>1.2.18</druid-spring-boot-starter.version>
         <fasterxml.jackson.version>2.13.2</fasterxml.jackson.version>
         <xxl-job.version>2.4.0</xxl-job.version>
         <easyexcel.version>3.2.1</easyexcel.version>
@@ -60,6 +58,7 @@
         <scala.binary.version>2.12</scala.binary.version>
         <knife4j-openapi3-spring-boot.version>4.3.0</knife4j-openapi3-spring-boot.version>
         <strimzi.version>0.39.0</strimzi.version>
+        <druid.version>1.2.25</druid.version>
     </properties>
 
     <dependencyManagement>
@@ -90,11 +89,6 @@
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-starter-data-mongodb</artifactId>
-                <version>2.6.1</version>
-            </dependency>
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-starter-data-neo4j</artifactId>
                 <version>2.6.1</version>
             </dependency>
             <dependency>
@@ -402,7 +396,7 @@
          <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>druid</artifactId>
-            <version>1.2.8</version>
+            <version>${druid.version}</version>
         </dependency>
 
         <dependency>
@@ -514,7 +508,7 @@
 
             </plugins>
         </pluginManagement>
- <finalName>${project.name}-${project.version}</finalName>
+        <finalName>${project.name}-${project.version}</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
@@ -561,7 +555,7 @@
                             <volume>${LOG_DIR}</volume>
                         </volumes>
                         <entrypoint>/app/start.sh</entrypoint>
-                        <mainClass>com.dfc.rbl.RedBlackListApplication</mainClass>
+                        <mainClass>com.afsun.lineage.SqlLineageAnalyzerApplication</mainClass>
                     </container>
                     <extraDirectories>
                         <paths>

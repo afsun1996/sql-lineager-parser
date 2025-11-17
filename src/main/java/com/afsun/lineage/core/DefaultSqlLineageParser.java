@@ -7,23 +7,17 @@ import com.afsun.lineage.core.meta.DynamicMetadataProvider;
 import com.afsun.lineage.core.meta.MetadataProvider;
 import com.afsun.lineage.core.parser.DefaultSqlStatementHandler;
 import com.afsun.lineage.core.parser.SqlStatementHandler;
+import com.afsun.lineage.core.util.ClickHouseSqlRewriter;
 import com.afsun.lineage.core.util.SqlDialectDetector;
 import com.afsun.lineage.core.util.SqlPlainNormalizationUtil;
 import com.afsun.lineage.core.util.SqlScriptUtils;
-import com.afsun.lineage.graph.ColumnNode;
-import com.afsun.lineage.graph.TableNode;
 import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.SQLUtils;
-import com.alibaba.druid.sql.ast.SQLExpr;
-import com.alibaba.druid.sql.ast.SQLName;
 import com.alibaba.druid.sql.ast.SQLStatement;
-import com.alibaba.druid.sql.ast.expr.SQLAllColumnExpr;
-import com.alibaba.druid.sql.ast.expr.SQLIdentifierExpr;
-import com.alibaba.druid.sql.ast.expr.SQLPropertyExpr;
-import com.alibaba.druid.sql.ast.statement.*;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
@@ -64,28 +58,34 @@ public class DefaultSqlLineageParser implements SqlLineageParser {
                 dbType = SqlDialectDetector.detect(statements.get(0));
                 log.debug("解析语句，检测到方言: {}", dbType);
             }
+            // 4. ClickHouse SQL重写（将 INSERT INTO ... WITH ... SELECT 转换为标准语法）
+            if (dbType == DbType.clickhouse) {
+                List<String> rewrittenStatements = new ArrayList<>();
+                for (String stmt : statements) {
+                    rewrittenStatements.add(ClickHouseSqlRewriter.rewrite(stmt));
+                }
+                statements = rewrittenStatements;
+            }
             if(!sqlStatementHandler.supports(dbType)){
                 throw new InternalParseException("数据库类型"+dbType.toString()+",暂不支持解析");
             }
-            // 4. 逐条解析语句
+            // 5. 逐条解析语句
             for (String stmtText : statements) {
                 if (stmtText.trim().isEmpty()) {
                     continue;
                 }
                 parseStatement(stmtText,dbType, graph, warns, skipped);
             }
-            // 5. 构建成功结果
+            // 6. 构建成功结果
             return buildResult(traceId, startTime, graph, warns, skipped.get());
         } catch (MetadataNotFoundException | UnsupportedSyntaxException e) {
             // 业务异常：直接重新抛出，由Controller处理
             log.warn("SQL解析业务异常: {} - {}", e.getClass().getSimpleName(), e.getMessage());
             throw e;
-
         } catch (InternalParseException e) {
             // 已封装的内部异常：直接抛出
             log.error("SQL解析内部异常: {}", e.getMessage(), e);
             throw e;
-
         } catch (Exception e) {
             // 未预期异常：封装为InternalParseException
             log.error("SQL解析发生未预期异常, traceId={}", traceId, e);
