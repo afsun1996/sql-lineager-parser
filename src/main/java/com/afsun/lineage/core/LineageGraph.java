@@ -12,8 +12,8 @@ import java.util.*;
 public class LineageGraph {
     private final Set<TableNode> tables = new LinkedHashSet<>();
     private final Set<ColumnNode> columns = new LinkedHashSet<>();
-    private final List<OwnerEdge> ownerEdges = new ArrayList<>();
-    private final List<ToEdge> toEdges = new ArrayList<>();
+    private final Set<OwnerEdge> ownerEdges = new LinkedHashSet<>();
+    private final Set<ToEdge> toEdges = new LinkedHashSet<>();
 
     public void addOwner(ColumnNode col, TableNode tbl) {
         this.columns.add(col);

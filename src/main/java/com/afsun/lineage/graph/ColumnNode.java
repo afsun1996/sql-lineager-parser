@@ -1,4 +1,5 @@
 package com.afsun.lineage.graph;
+
 import lombok.Data;
 import org.springframework.data.neo4j.core.schema.GeneratedValue;
 import org.springframework.data.neo4j.core.schema.Id;
@@ -50,6 +51,10 @@ public class ColumnNode {
                 && Objects.equals(column, that.column);
     }
 
+    @Override
+    public int hashCode() {
+        return Objects.hash(database, schema, table, column);
+    }
 
 
     private static String toLowerOrNull(String s) {

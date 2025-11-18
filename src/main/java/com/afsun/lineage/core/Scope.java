@@ -43,6 +43,10 @@ public class Scope {
         return alias2Table.size();
     }
 
+    public Set<String> getAllTableAliases() {
+        return alias2Table.keySet();
+    }
+
     public TableName getSingle() {
         return alias2Table.values().stream().findFirst().orElse(null);
     }

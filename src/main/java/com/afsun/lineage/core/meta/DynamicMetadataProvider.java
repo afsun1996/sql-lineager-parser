@@ -54,6 +54,12 @@ public class DynamicMetadataProvider implements MetadataProvider {
         log.info("删除临时表: {}", key);
     }
 
+    // ===== 新增:检查是否为临时表 =====
+    public boolean isTempTable(String database, String schema, String table) {
+        String key = buildKey(database, schema, table);
+        return tempTables.containsKey(key);
+    }
+
     private String buildKey(String db, String sc, String tb) {
         return (db == null ? "" : db.toLowerCase()) + "." +
                 (sc == null ? "" : sc.toLowerCase()) + "." +

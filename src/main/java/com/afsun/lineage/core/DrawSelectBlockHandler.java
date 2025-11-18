@@ -1,6 +1,5 @@
-package com.afsun.lineage.core.parser;
+package com.afsun.lineage.core;
 
-import com.afsun.lineage.core.*;
 import com.afsun.lineage.core.dto.SelectOutput;
 import com.afsun.lineage.core.dto.TargetContext;
 import com.afsun.lineage.core.exceptions.MetadataNotFoundException;
@@ -9,10 +8,8 @@ import com.afsun.lineage.core.meta.DynamicMetadataProvider;
 import com.afsun.lineage.core.meta.MetadataProvider;
 import com.afsun.lineage.graph.ColumnNode;
 import com.afsun.lineage.graph.TableNode;
-import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.ast.SQLExpr;
 import com.alibaba.druid.sql.ast.SQLName;
-import com.alibaba.druid.sql.ast.SQLStatement;
 import com.alibaba.druid.sql.ast.expr.SQLAllColumnExpr;
 import com.alibaba.druid.sql.ast.expr.SQLIdentifierExpr;
 import com.alibaba.druid.sql.ast.expr.SQLPropertyExpr;
@@ -20,166 +17,18 @@ import com.alibaba.druid.sql.ast.statement.*;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author afsun
- * @date 2025-11-11日 10:49
+ * @date 2025-11-17日 16:35
  */
 @Slf4j
-public class DefaultSqlStatementHandler implements SqlStatementHandler {
+public class DrawSelectBlockHandler {
 
     private final ExpressionResolver exprResolver = new DefaultExpressionResolver();
 
     private DynamicMetadataProvider dynamicMetadataProvider;
 
-    public DefaultSqlStatementHandler() {
-    }
-
-
-    @Override
-    public void handle(SQLStatement st,
-                       DbType dialect,
-                       Scope scope,
-                       LineageGraph graph,
-                       DynamicMetadataProvider metadata,
-                       List<LineageWarning> warns,
-                       AtomicInteger skipped) {
-        dynamicMetadataProvider = metadata;
-        // ===== 新增:处理DROP TABLE =====
-        if (st instanceof SQLDropTableStatement) {
-            SQLDropTableStatement drop = (SQLDropTableStatement) st;
-            for (SQLExprTableSource ts : drop.getTableSources()) {
-                String tableFull = ts.getExpr().toString();
-                TableName tn = TableName.parse(tableFull);
-                metadata.dropTempTable(tn.getDb(), tn.getSc(), tn.getTable());
-                warns.add(LineageWarning.of("DROP_TABLE",
-                        "已移除临时表: " + tn.getTable(), positionOf(st), ""));
-            }
-            skipped.incrementAndGet();
-            return;
-        }
-        if (st instanceof SQLCreateTableStatement) {
-            SQLCreateTableStatement ct = (SQLCreateTableStatement) st;
-            // ===== CTAS =====
-            if (ct.getSelect() != null) {
-                handleCTAS(ct, scope, graph, metadata, warns);
-                return;
-            }
-            // ===== 新增:普通CREATE TABLE =====
-            handleCreateTable(ct, metadata, warns);
-            return;
-        }
-        // ===== 新增:提取WITH子句 =====
-        if (st instanceof SQLSelectStatement) {
-            SQLSelectStatement selectStmt = (SQLSelectStatement) st;
-            SQLWithSubqueryClause withClause = selectStmt.getSelect().getWithSubQuery();
-            if (withClause != null) {
-                processWith(withClause, scope, graph, metadata, warns);
-            }
-            handleSelect(selectStmt.getSelect(), null, scope, graph, metadata, warns);
-            return;
-        }
-//        if (st instanceof SQLCreateTableStatement) {
-//            SQLCreateTableStatement ct = (SQLCreateTableStatement) st;
-//            if (ct.getSelect() != null) {
-//                handleCTAS(ct, scope, graph, metadata, warns);
-//                return;
-//            }
-//        }
-        if (st instanceof SQLCreateViewStatement) {
-            handleCreateView((SQLCreateViewStatement) st, scope, graph, metadata, warns);
-            return;
-        }
-        if (st instanceof SQLInsertStatement) {
-            handleInsert((SQLInsertStatement) st, scope, graph, metadata, warns);
-            return;
-        }
-        if (st instanceof SQLUpdateStatement) {
-            handleUpdate((SQLUpdateStatement) st, scope, graph, metadata, warns);
-            return;
-        }
-        if (st instanceof SQLDeleteStatement) {
-            // DELETE 不产生列级血缘，仅记录跳过
-            warns.add(LineageWarning.of("NO_LINEAGE_FOR_DELETE",
-                    "DELETE 语句不产生列级血缘", positionOf(st), "无需处理"));
-            skipped.incrementAndGet();
-            return;
-        }
-        if (st instanceof SQLMergeStatement) {
-            handleMerge((SQLMergeStatement) st, scope, graph, metadata, warns);
-            return;
-        }
-        // 未覆盖的语句类型
-        warns.add(LineageWarning.of("UNSUPPORTED_SYNTAX",
-                "不支持的语句类型: " + st.getClass().getSimpleName(),
-                positionOf(st), "请简化脚本或拆分受支持语句"));
-        throw new UnsupportedSyntaxException("不支持的语句: " + st.getClass().getSimpleName());
-    }
-
-    /**
-     * 处理普通CREATE TABLE(非CTAS):提取列定义并注册到动态元数据
-     */
-    private void handleCreateTable(SQLCreateTableStatement ct,
-                                   DynamicMetadataProvider metadata,
-                                   List<LineageWarning> warns) {
-        String tableFull = ct.getTableSource().toString();
-        TableName tn = TableName.parse(tableFull);
-        List<ColumnRef> columns = new ArrayList<>();
-        // 从列定义提取列名
-        if (ct.getTableElementList() != null) {
-            for (SQLTableElement elem : ct.getTableElementList()) {
-                if (elem instanceof SQLColumnDefinition) {
-                    SQLColumnDefinition colDef = (SQLColumnDefinition) elem;
-                    String colName = safeLower(colDef.getColumnName());
-
-                    // 创建ColumnRef(此时无血缘,仅占位)
-                    ColumnRef col = ColumnRef.of(
-                            tn.getDb(), tn.getSc(), tn.getTable(), colName,
-                            tn.getOdb(), tn.getOsc(), tn.getOtb(), colName
-                    );
-                    columns.add(col);
-                }
-            }
-        }
-
-        if (columns.isEmpty()) {
-            warns.add(LineageWarning.of("EMPTY_CREATE_TABLE",
-                    "CREATE TABLE 未包含列定义: " + tn.getTable(),
-                    positionOf(ct), "将无法解析后续引用"));
-        }
-        // 注册到动态元数据
-        metadata.registerTempTable(tn.getDb(), tn.getSc(), tn.getTable(), columns);
-        log.info("注册临时表: {} 列数={}", tn.getTable(), columns.size());
-    }
-
-    // SELECT 主入口（可被单独 SELECT、CTAS/VIEW/INSERT...SELECT 调用）
-    // target 可为空：仅扫描上游源列，建立 owner；非空：映射输出列到目标列并建立 to
-    private void handleSelect(SQLSelect select,
-                              TargetContext target,
-                              Scope scope,
-                              LineageGraph graph,
-                              DynamicMetadataProvider metadata,
-                              List<LineageWarning> warns) {
-        if (select == null || select.getQuery() == null) return;
-
-        log.debug("handleSelect: query类型={}, target={}",
-                  select.getQuery().getClass().getSimpleName(),
-                  target != null ? target.getTargetTable().getTable() : "null");
-
-        if (select.getQuery() instanceof SQLSelectQueryBlock) {
-            extractSelectBlock((SQLSelectQueryBlock) select.getQuery(), target, scope, graph, metadata, warns);
-        } else if (select.getQuery() instanceof SQLUnionQuery) {
-            extractUnion((SQLUnionQuery) select.getQuery(), target, scope, graph, metadata, warns);
-        } else {
-            warns.add(LineageWarning.of("UNSUPPORTED_SYNTAX",
-                    "不支持的 SELECT 结构: " + select.getQuery().getClass().getSimpleName(),
-                    positionOf(select.getQuery()), "请展开子查询或移除复杂 UNION 结构"));
-            throw new UnsupportedSyntaxException("不支持的 SELECT 结构");
-        }
-    }
-
-    // SELECT ... FROM ... 列清单解析（核心）
     private void extractSelectBlock(SQLSelectQueryBlock qb,
                                     TargetContext target,
                                     Scope scope,
@@ -187,13 +36,7 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
                                     DynamicMetadataProvider metadata,
                                     List<LineageWarning> warns) {
         // 1) FROM 解析：填充作用域中的表别名映射
-        bindFrom(qb.getFrom(), scope, graph, metadata, warns);
-
-        log.debug("extractSelectBlock: FROM类型={}, target={}, scope表数量={}",
-                  qb.getFrom() != null ? qb.getFrom().getClass().getSimpleName() : "null",
-                  target != null ? target.getTargetTable().getTable() : "null",
-                  scope.tableCount());
-
+        bindFrom(qb.getFrom(), scope, warns);
         // 2) 遍历 SELECT 列清单
         List<SelectOutput> outputs = new ArrayList<>();
         List<SQLSelectItem> items = qb.getSelectList();
@@ -273,20 +116,12 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
             }
         }
 
-        log.debug("extractSelectBlock: 输出列数={}", outputs.size());
-        for (int i = 0; i < outputs.size(); i++) {
-            SelectOutput out = outputs.get(i);
-            log.debug("  输出列[{}]: name={}, sources数量={}", i, out.getOutputName(), out.getSources().size());
-        }
-
         // 3) 若存在目标上下文（CTAS/VIEW/INSERT SELECT），将输出列映射为目标表列并建立血缘
         if (target != null && target.getTargetTable() != null) {
             // 3.1 决定目标列名列表：优先 target.getColNames() 显式列清单；否则用当前输出列名
             List<String> targetCols = target.getColNames() != null && !target.getColNames().isEmpty()
                     ? target.getColNames()
                     : map(outputs, SelectOutput::getOutputName);
-
-            log.debug("extractSelectBlock: 目标列数={}, 输出列数={}", targetCols.size(), outputs.size());
 
             // 3.2 对齐长度：按最短长度对齐，多余列发 WARN
             int n = Math.min(outputs.size(), targetCols.size());
@@ -295,8 +130,6 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
                         "目标列数与 SELECT 输出列数不一致，按最短长度对齐",
                         positionOf(qb), "建议显式指定 INSERT/CTAS 列清单并与 SELECT 对齐"));
             }
-
-            log.debug("extractSelectBlock: 开始建立血缘关系，对齐列数={}", n);
 
             for (int i = 0; i < n; i++) {
                 String tgtCol = safeLower(targetCols.get(i));
@@ -313,28 +146,13 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
                         tgtCol // 原始列名这里同小写；生产可保留原名
                 );
                 graph.addOwner(targetColumn, target.getTargetTable());
-
-                log.debug("  建立血缘[{}]: {} -> {} (sources={})",
-                          i, tgtCol, out.getOutputName(), out.getSources().size());
-
                 // 3.4 为每个源列建立 to(target → source)
                 for (ColumnRef src : out.getSources()) {
-                    // 关键修复：递归解析到真实的物理表列（跳过CTE/子查询）
-                    List<ColumnRef> physicalSources = resolvePhysicalSources(src, scope);
-                    for (ColumnRef physicalSrc : physicalSources) {
-                        // 过滤掉CTE和自动生成的子查询表
-                        if (isVirtualTable(physicalSrc.getTable())) {
-                            continue;
-                        }
-                        ColumnNode srcNode = toColumnNode(physicalSrc);
-                        // 源列 owner（列→表）
-                        graph.addOwner(srcNode, toTableNode(physicalSrc));
-                        // 列级血缘
-                        graph.addTo(targetColumn, srcNode);
-                        log.debug("    添加血缘: {}.{} -> {}.{}",
-                                  targetColumn.getTable(), targetColumn.getColumn(),
-                                  srcNode.getTable(), srcNode.getColumn());
-                    }
+                    ColumnNode srcNode = toColumnNode(src);
+                    // 源列 owner（列→表）
+                    graph.addOwner(srcNode, toTableNode(src));
+                    // 列级血缘
+                    graph.addTo(targetColumn, srcNode);
                 }
             }
         } else {
@@ -348,116 +166,20 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
         }
     }
 
-    // UNION 处理：按位置对齐两侧输出，并合并其 sources 到统一输出列
-    private void extractUnion(SQLUnionQuery uq,
-                              TargetContext target,
-                              Scope scope,
-                              LineageGraph graph,
-                              DynamicMetadataProvider metadata,
-                              List<LineageWarning> warns) {
-        // 仅处理二元 UNION；链式 UNION 可递归处理 left 或 right
-        List<SelectOutput> left = collectSelectOutputs(uq.getLeft(), scope, metadata, graph, warns);
-        List<SelectOutput> right = collectSelectOutputs(uq.getRight(), scope, metadata, graph, warns);
-        int n = Math.min(left.size(), right.size());
-        if (left.size() != right.size()) {
-            warns.add(LineageWarning.of("UNION_MISMATCH",
-                    "UNION 分支列数不一致，按最短长度位置对齐",
-                    positionOf(uq), "建议为两侧提供一致的列数与别名"));
-        }
-        // 将左右分支对应列的 sources 合并为一个输出集合
-        List<SelectOutput> merged = new ArrayList<>();
-        for (int i = 0; i < n; i++) {
-            String name = left.get(i).getOutputName() != null ? left.get(i).getOutputName() : right.get(i).getOutputName();
-            Set<ColumnRef> unionSources = new LinkedHashSet<>();
-            unionSources.addAll(left.get(i).getSources());
-            unionSources.addAll(right.get(i).getSources());
-            merged.add(new SelectOutput(name != null ? name : "col_" + i, new ArrayList<>(unionSources)));
-        }
-
-        // 若有目标上下文，则映射 merged 到目标；否则仅记录 owner
-        if (target != null && target.getTargetTable() != null) {
-            List<String> tgtCols = target.getColNames() != null && !target.getColNames().isEmpty()
-                    ? target.getColNames()
-                    : map(merged, o -> o.getOutputName());
-            int m = Math.min(merged.size(), tgtCols.size());
-            for (int i = 0; i < m; i++) {
-                String tgtCol = safeLower(tgtCols.get(i));
-                SelectOutput out = merged.get(i);
-                ColumnNode targetColumn = new ColumnNode(
-                        target.getTargetTable().getDatabase(),
-                        target.getTargetTable().getSchema(),
-                        target.getTargetTable().getTable(),
-                        tgtCol,
-                        target.getTargetTable().getOriginalDatabase(),
-                        target.getTargetTable().getOriginalSchema(),
-                        target.getTargetTable().getOriginalTable(),
-                        tgtCol
-                );
-                graph.addOwner(targetColumn, target.getTargetTable());
-                for (ColumnRef src : out.getSources()) {
-                    ColumnNode srcNode = toColumnNode(src);
-                    graph.addOwner(srcNode, toTableNode(src));
-                    graph.addTo(targetColumn, srcNode);
-                }
-            }
-        } else {
-            for (SelectOutput out : merged) {
-                for (ColumnRef src : out.getSources()) {
-                    ColumnNode srcNode = toColumnNode(src);
-                    graph.addOwner(srcNode, toTableNode(src));
-                }
-            }
-        }
-    }
-
-    // 收集任意 SELECT（块或 UNION）输出，便于 UNION 合并
-    private List<SelectOutput> collectSelectOutputs(SQLSelectQuery q,
-                                                    Scope scope,
-                                                    DynamicMetadataProvider metadata,
-                                                    LineageGraph graph,
-                                                    List<LineageWarning> warns) {
-        if (q instanceof SQLSelectQueryBlock) {
-            // 临时收集：不写图（target=null），仅收集 outputs
-            return collectSelectBlockOutputs((SQLSelectQueryBlock) q, scope, metadata, warns);
-        } else if (q instanceof SQLUnionQuery) {
-            List<SelectOutput> left = collectSelectOutputs(((SQLUnionQuery) q).getLeft(), scope, metadata, graph, warns);
-            List<SelectOutput> right = collectSelectOutputs(((SQLUnionQuery) q).getRight(), scope, metadata, graph, warns);
-            int n = Math.min(left.size(), right.size());
-            List<SelectOutput> merged = new ArrayList<>();
-            for (int i = 0; i < n; i++) {
-                String name = left.get(i).getOutputName() != null ? left.get(i).getOutputName() : right.get(i).getOutputName();
-                Set<ColumnRef> unionSources = new LinkedHashSet<>();
-                unionSources.addAll(left.get(i).getSources());
-                unionSources.addAll(right.get(i).getSources());
-                merged.add(new SelectOutput(name != null ? name : "col_" + i, new ArrayList<>(unionSources)));
-            }
-            return merged;
-        }
-        return Collections.emptyList();
-    }
-
     // 与 extractSelectBlock 类似，但不写图，仅返回输出列描述
     private List<SelectOutput> collectSelectBlockOutputs(SQLSelectQueryBlock qb,
                                                          Scope scope,
                                                          DynamicMetadataProvider metadata,
                                                          List<LineageWarning> warns) {
-        // ===== 关键修复：创建一个临时的LineageGraph用于bindFrom，以便正确处理子查询 =====
-        LineageGraph tempGraph = new LineageGraph();
-        bindFrom(qb.getFrom(), scope, tempGraph, metadata, warns);
+        bindFrom(qb.getFrom(), scope, warns);
         List<SelectOutput> outputs = new ArrayList<>();
         int idx = 0;
         for (SQLSelectItem item : qb.getSelectList()) {
             SQLExpr expr = item.getExpr();
             String alias = safeLower(item.getAlias());
             if (expr instanceof SQLAllColumnExpr) {
-                SQLAllColumnExpr expr2 = (SQLAllColumnExpr) expr;
-                SQLExpr owner = expr2.getOwner();
-                String qualifier = null;
-                if(owner != null) {
-                    SQLIdentifierExpr owner1 = (SQLIdentifierExpr)owner;
-                    qualifier = owner1.getName();
-                }
-                outputs.addAll(expandStar(qualifier, scope, metadata, null, warns));
+
+                outputs.addAll(expandStar(null, scope, metadata, null, warns));
             } else if (expr instanceof SQLIdentifierExpr) {
                 SQLIdentifierExpr sqlExpr = (SQLIdentifierExpr) expr;
                 // ===== 修复：先判断是否为星号展开 =====
@@ -492,9 +214,35 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
         return outputs;
     }
 
+    // 收集任意 SELECT（块或 UNION）输出，便于 UNION 合并
+    private List<SelectOutput> collectSelectOutputs(SQLSelectQuery q,
+                                                    Scope scope,
+                                                    DynamicMetadataProvider metadata,
+                                                    LineageGraph graph,
+                                                    List<LineageWarning> warns) {
+        if (q instanceof SQLSelectQueryBlock) {
+            // 临时收集：不写图（target=null），仅收集 outputs
+            return collectSelectBlockOutputs((SQLSelectQueryBlock) q, scope, metadata, warns);
+        } else if (q instanceof SQLUnionQuery) {
+            List<SelectOutput> left = collectSelectOutputs(((SQLUnionQuery) q).getLeft(), scope, metadata, graph, warns);
+            List<SelectOutput> right = collectSelectOutputs(((SQLUnionQuery) q).getRight(), scope, metadata, graph, warns);
+            int n = Math.min(left.size(), right.size());
+            List<SelectOutput> merged = new ArrayList<>();
+            for (int i = 0; i < n; i++) {
+                String name = left.get(i).getOutputName() != null ? left.get(i).getOutputName() : right.get(i).getOutputName();
+                Set<ColumnRef> unionSources = new LinkedHashSet<>();
+                unionSources.addAll(left.get(i).getSources());
+                unionSources.addAll(right.get(i).getSources());
+                merged.add(new SelectOutput(name != null ? name : "col_" + i, new ArrayList<>(unionSources)));
+            }
+            return merged;
+        }
+        return Collections.emptyList();
+    }
+
+
     // 绑定 FROM 表与别名到作用域
-    private void bindFrom(SQLTableSource from, Scope scope, LineageGraph graph,
-                         DynamicMetadataProvider metadata, List<LineageWarning> warns) {
+    private void bindFrom(SQLTableSource from, Scope scope, List<LineageWarning> warns) {
         if (from == null) return;
         if (from instanceof SQLExprTableSource) {
             SQLExprTableSource ts = (SQLExprTableSource) from;
@@ -506,8 +254,8 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
         }
         if (from instanceof SQLJoinTableSource) {
             SQLJoinTableSource join = (SQLJoinTableSource) from;
-            bindFrom(join.getLeft(), scope, graph, metadata, warns);
-            bindFrom(join.getRight(), scope, graph, metadata, warns);
+            bindFrom(join.getLeft(), scope, warns);
+            bindFrom(join.getRight(), scope, warns);
             return;
         }
         // ===== 修复核心:完整处理子查询 =====
@@ -526,16 +274,9 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
             // 1. 创建子查询专用Scope(隔离作用域)
             Scope subScope = new Scope();
 
-            // 2. 收集子查询输出列（用于注册到父scope）
-            // 关键修复：先收集输出列，这样会递归处理所有嵌套的子查询并正确绑定它们的列信息
+            // 2. 收集子查询输出列
             List<SelectOutput> subOutputs = collectSelectOutputs(
-                    subTS.getSelect().getQuery(), subScope, metadata, graph, warns);
-
-            log.debug("bindFrom: 子查询 {} 输出列数={}", subAlias, subOutputs.size());
-            for (int i = 0; i < subOutputs.size(); i++) {
-                SelectOutput out = subOutputs.get(i);
-                log.debug("  子查询输出列[{}]: name={}, sources数量={}", i, out.getOutputName(), out.getSources().size());
-            }
+                    subTS.getSelect().getQuery(), subScope, dynamicMetadataProvider, null, warns);
 
             // 3. 将子查询输出列注册为虚拟表到父Scope
             TableName virtualTable = TableName.of(null, null, subAlias, null, null, subAlias);
@@ -578,6 +319,7 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
                 for (ColumnRef c : cols) {
                     outs.add(new SelectOutput(c.getColumn(), Collections.singletonList(c)));
                     if (graphOrNull != null) {
+                        // 仅在需要时写 owner（在 select-only 场景 write 为 null）
                         graphOrNull.addOwner(toColumnNode(c), toTableNode(c));
                     }
                 }
@@ -591,20 +333,9 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
             }
             List<ColumnRef> cols = metadataColumns(metadata, tn, warns);
             for (ColumnRef c : cols) {
-                // 关键修复：检查是否为子查询列，如果是则使用其源列
-                List<ColumnRef> subSources = scope.getSubqueryColumnSources(qualifier, c.getColumn());
-                if (subSources != null && !subSources.isEmpty()) {
-                    outs.add(new SelectOutput(c.getColumn(), subSources));
-                    if (graphOrNull != null) {
-                        for (ColumnRef src : subSources) {
-                            graphOrNull.addOwner(toColumnNode(src), toTableNode(src));
-                        }
-                    }
-                } else {
-                    outs.add(new SelectOutput(c.getColumn(), Collections.singletonList(c)));
-                    if (graphOrNull != null) {
-                        graphOrNull.addOwner(toColumnNode(c), toTableNode(c));
-                    }
+                outs.add(new SelectOutput(c.getColumn(), Collections.singletonList(c)));
+                if (graphOrNull != null) {
+                    graphOrNull.addOwner(toColumnNode(c), toTableNode(c));
                 }
             }
         }
@@ -652,6 +383,27 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
         TargetContext target = TargetContext.of(targetTable,
                 map(outputs, SelectOutput::getOutputName));
         handleSelect(ct.getSelect(), target, scope, graph, metadata, warns);
+    }
+
+    // SELECT 主入口（可被单独 SELECT、CTAS/VIEW/INSERT...SELECT 调用）
+    // target 可为空：仅扫描上游源列，建立 owner；非空：映射输出列到目标列并建立 to
+    private void handleSelect(SQLSelect select,
+                              TargetContext target,
+                              Scope scope,
+                              LineageGraph graph,
+                              DynamicMetadataProvider metadata,
+                              List<LineageWarning> warns) {
+        if (select == null || select.getQuery() == null) return;
+        if (select.getQuery() instanceof SQLSelectQueryBlock) {
+            extractSelectBlock((SQLSelectQueryBlock) select.getQuery(), target, scope, graph, metadata, warns);
+        } else if (select.getQuery() instanceof SQLUnionQuery) {
+            extractUnion((SQLUnionQuery) select.getQuery(), target, scope, graph, metadata, warns);
+        } else {
+            warns.add(LineageWarning.of("UNSUPPORTED_SYNTAX",
+                    "不支持的 SELECT 结构: " + select.getQuery().getClass().getSimpleName(),
+                    positionOf(select.getQuery()), "请展开子查询或移除复杂 UNION 结构"));
+            throw new UnsupportedSyntaxException("不支持的 SELECT 结构");
+        }
     }
 
     // CREATE VIEW v AS SELECT ...
@@ -706,14 +458,7 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
         if (withClause != null) {
             processWith(withClause, scope, graph, metadata, warns);
         }
-
-        log.debug("开始处理INSERT SELECT，目标表: {}, 目标列数: {}", targetTable.getTable(), tgtCols.size());
-        int toEdgesBefore = graph.getToEdges().size();
-
         handleSelect(ins.getQuery(), target, scope, graph, metadata, warns);
-
-        int toEdgesAfter = graph.getToEdges().size();
-        log.debug("INSERT SELECT处理完成，血缘关系从 {} 增加到 {}", toEdgesBefore, toEdgesAfter);
     }
 
     // UPDATE a SET a.col = expr FROM ...
@@ -723,8 +468,8 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
                               DynamicMetadataProvider metadata,
                               List<LineageWarning> warns) {
         // 绑定主表与 FROM 表
-        bindFrom(upd.getTableSource(), scope, graph, metadata, warns);
-        if (upd.getFrom() != null) bindFrom(upd.getFrom(), scope, graph, metadata, warns);
+        bindFrom(upd.getTableSource(), scope, warns);
+        if (upd.getFrom() != null) bindFrom(upd.getFrom(), scope, warns);
 
         for (SQLUpdateSetItem it : upd.getItems()) {
             SQLExpr left = it.getColumn();
@@ -817,75 +562,64 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
             scope.putCTE(cteName, entry.getSubQuery().toString());
         }
     }
-
-
-    private void handleMerge(SQLMergeStatement mg,
-                             Scope scope,
-                             LineageGraph graph,
-                             DynamicMetadataProvider metadata,
-                             List<LineageWarning> warns) {
-        // 绑定 INTO/USING
-        SQLTableSource intoTS = mg.getInto();
-        if (intoTS instanceof SQLExprTableSource) {
-            SQLExprTableSource ts = (SQLExprTableSource) intoTS;
-            TableName t = TableName.parse(ts.getExpr().toString());
-            String aliasOrName = safeLower(ts.getAlias() != null ? ts.getAlias() : t.getTable());
-            scope.addTableAlias(aliasOrName, t);
+    // UNION 处理：按位置对齐两侧输出，并合并其 sources 到统一输出列
+    private void extractUnion(SQLUnionQuery uq,
+                              TargetContext target,
+                              Scope scope,
+                              LineageGraph graph,
+                              DynamicMetadataProvider metadata,
+                              List<LineageWarning> warns) {
+        // 仅处理二元 UNION；链式 UNION 可递归处理 left 或 right
+        List<SelectOutput> left = collectSelectOutputs(uq.getLeft(), scope, metadata, graph, warns);
+        List<SelectOutput> right = collectSelectOutputs(uq.getRight(), scope, metadata, graph, warns);
+        int n = Math.min(left.size(), right.size());
+        if (left.size() != right.size()) {
+            warns.add(LineageWarning.of("UNION_MISMATCH",
+                    "UNION 分支列数不一致，按最短长度位置对齐",
+                    positionOf(uq), "建议为两侧提供一致的列数与别名"));
         }
-        SQLTableSource usingTS = mg.getUsing();
-        if (usingTS instanceof SQLExprTableSource) {
-            SQLExprTableSource ts = (SQLExprTableSource) usingTS;
-            TableName t = TableName.parse(ts.getExpr().toString());
-            String aliasOrName = safeLower(ts.getAlias() != null ? ts.getAlias() : t.getTable());
-            scope.addTableAlias(aliasOrName, t);
+        // 将左右分支对应列的 sources 合并为一个输出集合
+        List<SelectOutput> merged = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            String name = left.get(i).getOutputName() != null ? left.get(i).getOutputName() : right.get(i).getOutputName();
+            Set<ColumnRef> unionSources = new LinkedHashSet<>();
+            unionSources.addAll(left.get(i).getSources());
+            unionSources.addAll(right.get(i).getSources());
+            merged.add(new SelectOutput(name != null ? name : "col_" + i, new ArrayList<>(unionSources)));
         }
-        // 兼容：优先尝试 getUpdateClauseList()；没有则用 getUpdateClause()
-        List updateClauses = getMergeUpdateClausesCompat(mg);
-        for (Object ucObj : updateClauses) {
-            List<SQLUpdateSetItem> items = getUpdateItemsCompat(ucObj);
-            for (SQLUpdateSetItem it : items) {
-                SQLExpr left = it.getColumn();
-                if (!(left instanceof SQLPropertyExpr)) {
-                    warns.add(LineageWarning.of("UNSUPPORTED_SET",
-                            "MERGE UPDATE 左侧列非限定列，已跳过", positionOf(left), "请使用 a.col 形式"));
-                    continue;
-                }
-                SQLPropertyExpr lpe = (SQLPropertyExpr) left;
-                String lAlias = safeLower(lpe.getOwner().toString());
-                String lCol = safeLower(lpe.getName());
-                TableName ltn = scope.resolveTable(lAlias);
-                if (ltn == null) continue;
 
-                ColumnRef targetRef = ColumnRef.of(ltn.getDb(), ltn.getSc(), ltn.getTable(), lCol, ltn.getOdb(), ltn.getOsc(), ltn.getOtb(), lCol);
-                ColumnNode targetNode = toColumnNode(targetRef);
-                List<ColumnRef> sources = exprResolver.resolve(it.getValue(), scope, metadata, warns);
-                graph.addOwner(targetNode, toTableNode(targetRef));
-                for (ColumnRef src : sources) {
+        // 若有目标上下文，则映射 merged 到目标；否则仅记录 owner
+        if (target != null && target.getTargetTable() != null) {
+            List<String> tgtCols = target.getColNames() != null && !target.getColNames().isEmpty()
+                    ? target.getColNames()
+                    : map(merged, o -> o.getOutputName());
+            int m = Math.min(merged.size(), tgtCols.size());
+            for (int i = 0; i < m; i++) {
+                String tgtCol = safeLower(tgtCols.get(i));
+                SelectOutput out = merged.get(i);
+                ColumnNode targetColumn = new ColumnNode(
+                        target.getTargetTable().getDatabase(),
+                        target.getTargetTable().getSchema(),
+                        target.getTargetTable().getTable(),
+                        tgtCol,
+                        target.getTargetTable().getOriginalDatabase(),
+                        target.getTargetTable().getOriginalSchema(),
+                        target.getTargetTable().getOriginalTable(),
+                        tgtCol
+                );
+                graph.addOwner(targetColumn, target.getTargetTable());
+                for (ColumnRef src : out.getSources()) {
                     ColumnNode srcNode = toColumnNode(src);
                     graph.addOwner(srcNode, toTableNode(src));
-                    graph.addTo(targetNode, srcNode);
+                    graph.addTo(targetColumn, srcNode);
                 }
             }
-        }
-        // 兼容：优先尝试 getInsertClauseList()；没有则用 getInsertClause()
-        List insertClauses = getMergeInsertClausesCompat(mg);
-        for (Object icObj : insertClauses) {
-            // 读取 INSERT 列清单
-            List cols = readInsertColumnsCompat(icObj);
-            // 读取 INSERT SELECT（可能是 SQLSelect 或 SQLSelectQuery）
-            SQLSelect select = getInsertSelectCompat(icObj);
-            if (select != null) {
-                // 目标为 INTO 表
-                if (intoTS instanceof SQLExprTableSource) {
-                    SQLExprTableSource into = (SQLExprTableSource) intoTS;
-                    TableName tn = TableName.parse(into.getExpr().toString());
-                    TableNode targetTable = new TableNode(tn.getDb(), tn.getSc(), tn.getTable(), tn.getOdb(), tn.getOsc(), tn.getOtb());
-                    TargetContext tgt = TargetContext.of(targetTable, cols);
-                    handleSelect(select, tgt, scope, graph, metadata, warns);
+        } else {
+            for (SelectOutput out : merged) {
+                for (ColumnRef src : out.getSources()) {
+                    ColumnNode srcNode = toColumnNode(src);
+                    graph.addOwner(srcNode, toTableNode(src));
                 }
-            } else {
-                warns.add(LineageWarning.of("NO_LINEAGE_FOR_VALUES",
-                        "MERGE INSERT VALUES 不解析列级血缘", positionOf(icObj), "如需列级血缘请改为 INSERT ... SELECT"));
             }
         }
     }
@@ -934,115 +668,6 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
         return safeLower(expr == null ? null : expr.toString());
     }
 
-
-    // 兼容读取 MERGE Update 子句（列表或单个）
-
-    private List getMergeUpdateClausesCompat(SQLMergeStatement mg) {
-        List list = new ArrayList<>();
-        try {
-            // 尝试 list 版
-            java.lang.reflect.Method m = mg.getClass().getMethod("getUpdateClauseList");
-            Object obj = m.invoke(mg);
-            if (obj instanceof List) list.addAll((List<?>) obj);
-        } catch (NoSuchMethodException e) {
-            // 回退单个
-            try {
-                java.lang.reflect.Method m = mg.getClass().getMethod("getUpdateClause");
-                Object obj = m.invoke(mg);
-                if (obj != null) list.add(obj);
-            } catch (Exception ignore) {
-            }
-        } catch (Exception ignore) {
-        }
-        return list;
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<SQLUpdateSetItem> getUpdateItemsCompat(Object updateClauseObj) {
-        try {
-            java.lang.reflect.Method m = updateClauseObj.getClass().getMethod("getItems");
-            Object obj = m.invoke(updateClauseObj);
-            if (obj instanceof List) return (List) obj;
-        } catch (Exception ignore) {
-        }
-        return new ArrayList<>();
-    }
-
-
-    // 兼容读取 MERGE Insert 子句（列表或单个）
-    private List getMergeInsertClausesCompat(SQLMergeStatement mg) {
-        List list = new ArrayList<>();
-        try {
-            // 尝试 list 版
-            java.lang.reflect.Method m = mg.getClass().getMethod("getInsertClauseList");
-            Object obj = m.invoke(mg);
-            if (obj instanceof List) list.addAll((List<?>) obj);
-        } catch (NoSuchMethodException e) {
-            // 回退单个
-            try {
-                java.lang.reflect.Method m = mg.getClass().getMethod("getInsertClause");
-                Object obj = m.invoke(mg);
-                if (obj != null) list.add(obj);
-            } catch (Exception ignore) {
-            }
-        } catch (Exception ignore) {
-        }
-        return list;
-    }
-
-
-    // 兼容读取 InsertClause 列清单（SQLName/SQLExpr 等）
-    private List<String> readInsertColumnsCompat(Object insertClauseObj) {
-        List<String> cols = new ArrayList<>();
-        try {
-            java.lang.reflect.Method m = insertClauseObj.getClass().getMethod("getColumns");
-            Object obj = m.invoke(insertClauseObj);
-            if (obj instanceof List) {
-                for (Object c : (List<?>) obj) {
-                    if (c instanceof SQLIdentifierExpr) {
-                        cols.add(safeLower(((SQLIdentifierExpr) c).getName()));
-                    } else if (c instanceof SQLPropertyExpr) {
-                        cols.add(safeLower(((SQLPropertyExpr) c).getName()));
-                    } else if (c instanceof SQLName) {
-                        cols.add(safeLower(((SQLName) c).getSimpleName()));
-                    } else if (c != null) {
-                        cols.add(safeLower(c.toString()));
-                    }
-                }
-            }
-        } catch (Exception ignore) {
-        }
-        return cols;
-    }
-
-
-    // 兼容读取 InsertClause 的 SELECT（可能返回 SQLSelect 或 SQLSelectQuery）
-    private SQLSelect getInsertSelectCompat(Object insertClauseObj) {
-        try {
-            // 尝试 getSelect(): SQLSelect
-            try {
-                java.lang.reflect.Method mSelect = insertClauseObj.getClass().getMethod("getSelect");
-                Object sel = mSelect.invoke(insertClauseObj);
-                if (sel instanceof SQLSelect) return (SQLSelect) sel;
-            } catch (NoSuchMethodException ignore) {
-                // 某些版本只有 getQuery(): SQLSelectQuery
-            }
-            // 尝试 getQuery(): SQLSelectQuery
-            try {
-                java.lang.reflect.Method mQuery = insertClauseObj.getClass().getMethod("getQuery");
-                Object q = mQuery.invoke(insertClauseObj);
-                if (q instanceof SQLSelectQuery) {
-                    SQLSelect s = new SQLSelect();
-                    s.setQuery((SQLSelectQuery) q);
-                    return s;
-                }
-            } catch (NoSuchMethodException ignore2) {
-            }
-        } catch (Exception ignoreAll) {
-        }
-        return null;
-    }
-
     // 工具：从元数据获取列清单并转 ColumnRef
     private List<ColumnRef> metadataColumns(MetadataProvider metadata, TableName tn, List<LineageWarning> warns) {
         List<ColumnRef> cols = metadata.getColumns(tn.getDb(), tn.getSc(), tn.getTable());
@@ -1050,49 +675,6 @@ public class DefaultSqlStatementHandler implements SqlStatementHandler {
             throw new MetadataNotFoundException("元数据缺失: " + tn.toString());
         }
         return cols;
-    }
-
-    // 判断是否为虚拟表（CTE或自动生成的子查询）
-    private boolean isVirtualTable(String tableName) {
-        if (tableName == null) return false;
-        // 自动生成的子查询别名
-        if (tableName.startsWith("__subquery_")) return true;
-        // 检查是否为CTE（只检查临时表，不检查物理表）
-        // CTE在dynamicMetadataProvider中注册，但物理表也在其中
-        // 需要区分：如果表名是小写且在CTE map中，则为CTE
-        return dynamicMetadataProvider.isTempTable(null, null, tableName);
-    }
-
-    // 递归解析列引用，追踪到真实的物理表列（跳过CTE/子查询）
-    private List<ColumnRef> resolvePhysicalSources(ColumnRef colRef, Scope scope) {
-        List<ColumnRef> result = new ArrayList<>();
-        // 检查是否为子查询/CTE列
-        List<ColumnRef> subSources = scope.getSubqueryColumnSources(colRef.getTable(), colRef.getColumn());
-        if (subSources != null && !subSources.isEmpty()) {
-            // 递归解析每个源列
-            for (ColumnRef subSrc : subSources) {
-                result.addAll(resolvePhysicalSources(subSrc, scope));
-            }
-            return result;
-        }
-
-        // 检查是否为CTE（从dynamicMetadataProvider中查找）
-        List<ColumnRef> cteCols = dynamicMetadataProvider.getColumns(colRef.getDatabase(), colRef.getSchema(), colRef.getTable());
-        if (cteCols != null && !cteCols.isEmpty()) {
-            // 这是一个CTE，尝试从CTE的列定义中找到对应列的源
-            for (ColumnRef cteCol : cteCols) {
-                if (cteCol.getColumn().equalsIgnoreCase(colRef.getColumn())) {
-                    // 找到了CTE中的列定义，但这里只有列名，没有源信息
-                    // 直接返回当前列（无法继续追踪）
-                    result.add(colRef);
-                    return result;
-                }
-            }
-        }
-
-        // 已经是物理表列，直接返回
-        result.add(colRef);
-        return result;
     }
 
 

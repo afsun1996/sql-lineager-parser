@@ -31,8 +31,71 @@ public class DefaultExpressionResolver implements ExpressionResolver {
         // 未限定列: col（仅单表作用域允许）
         if (node instanceof SQLIdentifierExpr) {
             String col = ((SQLIdentifierExpr) node).getName();
-            ColumnRef ref = scope.resolveUnqualifiedColumn(col, warns);
-            if (ref != null) out.add(ref);
+            // ===== 修复：先尝试从scope解析，失败时尝试从单表元数据解析 =====
+            ColumnRef ref = scope.resolveUnqualifiedColumn(col, null);
+            if (ref != null) {
+                out.add(ref);
+                return;
+            }
+
+            // ===== 关键修复：尝试从所有表的子查询列中查找 =====
+            // 遍历scope中的所有表，查找匹配的子查询列
+            List<ColumnRef> foundSources = null;
+            String foundTable = null;
+            for (String tableAlias : scope.getAllTableAliases()) {
+                List<ColumnRef> subSources = scope.getSubqueryColumnSources(tableAlias, col);
+                if (subSources != null && !subSources.isEmpty()) {
+                    if (foundSources == null) {
+                        foundSources = subSources;
+                        foundTable = tableAlias;
+                    } else {
+                        // 如果在多个表中找到同名列，优先使用非自动生成的别名
+                        if (foundTable != null && foundTable.startsWith("__subquery_") && !tableAlias.startsWith("__subquery_")) {
+                            foundSources = subSources;
+                            foundTable = tableAlias;
+                        } else if (!foundTable.startsWith("__subquery_") && !tableAlias.startsWith("__subquery_")) {
+                            // 两个都不是自动生成的别名，这是歧义的
+                            if (warns != null) {
+                                warns.add(LineageWarning.of("AMBIGUOUS_COL",
+                                        "未限定列名在多个子查询中存在: " + col,
+                                        "ExpressionResolver", "请使用 t.col 形式"));
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+
+            if (foundSources != null) {
+                out.addAll(foundSources);
+                return;
+            }
+
+            // 单表场景：尝试从元数据解析
+            if (scope.tableCount() == 1) {
+                TableName tn = scope.getSingle();
+                if (tn != null && metadata != null) {
+                    List<ColumnRef> cols = metadata.getColumns(tn.db, tn.sc, tn.table);
+                    if (cols != null) {
+                        for (ColumnRef c : cols) {
+                            if (c.getColumn().equalsIgnoreCase(col)) {
+                                out.add(c);
+                                return;
+                            }
+                        }
+                    }
+                }
+                // 列不存在于元数据中，记录警告
+                if (warns != null) {
+                    warns.add(LineageWarning.of("COLUMN_NOT_FOUND",
+                            "未找到列: " + col + " (表: " + (tn != null ? tn.table : "unknown") + ")",
+                            "ExpressionResolver", "请检查列名或元数据"));
+                }
+            } else if (warns != null) {
+                warns.add(LineageWarning.of("AMBIGUOUS_COL",
+                        "未限定列名在多表作用域中不唯一: " + col,
+                        "ExpressionResolver", "请使用 t.col 形式"));
+            }
             return;
         }
 
@@ -52,8 +115,35 @@ public class DefaultExpressionResolver implements ExpressionResolver {
                     out.addAll(subSources);
                 } else {
                     // 回退到普通列解析
-                    ColumnRef ref = scope.resolveQualifiedColumn(owner, name, warns);
-                    if (ref != null) out.add(ref);
+                    ColumnRef ref = scope.resolveQualifiedColumn(owner, name, null);
+                    if (ref != null) {
+                        out.add(ref);
+                    } else {
+                        // ===== 修复：尝试从元数据直接查找 =====
+                        TableName tn = scope.resolveTable(owner);
+                        if (tn != null && metadata != null) {
+                            List<ColumnRef> cols = metadata.getColumns(tn.db, tn.sc, tn.table);
+                            if (cols != null) {
+                                boolean found = false;
+                                for (ColumnRef c : cols) {
+                                    if (c.getColumn().equalsIgnoreCase(name)) {
+                                        out.add(c);
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                if (!found && warns != null) {
+                                    warns.add(LineageWarning.of("COLUMN_NOT_FOUND",
+                                            "未找到列: " + owner + "." + name + " (表: " + tn.table + ")",
+                                            "ExpressionResolver", "请检查列名或元数据"));
+                                }
+                            }
+                        } else if (warns != null) {
+                            warns.add(LineageWarning.of("TABLE_NOT_FOUND",
+                                    "无法解析别名/表名: " + owner,
+                                    "ExpressionResolver", "请检查FROM子句或CTE定义"));
+                        }
+                    }
                 }
             }
             return;
@@ -207,6 +297,14 @@ public class DefaultExpressionResolver implements ExpressionResolver {
                     if (expr instanceof SQLAllColumnExpr) {
                         // SELECT ：单表时展开；多表发WARN
                         expandStar(null, scope, metadata, warns, out);
+                    } else if (expr instanceof SQLIdentifierExpr) {
+                        // ===== 修复：处理SQLIdentifierExpr，判断是否为星号 =====
+                        SQLIdentifierExpr ie = (SQLIdentifierExpr) expr;
+                        if ("*".equals(ie.getName())) {
+                            expandStar(null, scope, metadata, warns, out);
+                        } else {
+                            walk(expr, scope, metadata, warns, out);
+                        }
                     } else if (expr instanceof SQLPropertyExpr) {
                         SQLPropertyExpr pe = (SQLPropertyExpr) expr;
                         if ("*".equals(pe.getName())) {

@@ -7,7 +7,6 @@ import com.afsun.lineage.core.meta.DynamicMetadataProvider;
 import com.afsun.lineage.core.meta.MetadataProvider;
 import com.afsun.lineage.core.parser.DefaultSqlStatementHandler;
 import com.afsun.lineage.core.parser.SqlStatementHandler;
-import com.afsun.lineage.core.util.ClickHouseSqlRewriter;
 import com.afsun.lineage.core.util.SqlDialectDetector;
 import com.afsun.lineage.core.util.SqlPlainNormalizationUtil;
 import com.afsun.lineage.core.util.SqlScriptUtils;
@@ -30,15 +29,15 @@ public class DefaultSqlLineageParser implements SqlLineageParser {
     /**
      * 解析SQL文本，提取表和列级血缘关系
      *
-     * @param sqlText SQL脚本文本
+     * @param sqlText          SQL脚本文本
      * @param metadataProvider 元数据提供者
      * @return 解析结果，包含血缘图、警告信息等
-     * @throws MetadataNotFoundException 元数据缺失异常
+     * @throws MetadataNotFoundException  元数据缺失异常
      * @throws UnsupportedSyntaxException 不支持的SQL语法异常
-     * @throws InternalParseException 内部解析异常
+     * @throws InternalParseException     内部解析异常
      */
     @Override
-    public ParseResult parse(String sqlText,DbType dbType, MetadataProvider metadataProvider) {
+    public ParseResult parse(String sqlText, DbType dbType, MetadataProvider metadataProvider) {
         long startTime = System.currentTimeMillis();
         String traceId = "LN-" + System.currentTimeMillis();
         List<LineageWarning> warns = new ArrayList<>();
@@ -53,28 +52,39 @@ public class DefaultSqlLineageParser implements SqlLineageParser {
             String cleanedSql = SqlScriptUtils.stripComments(formatSql);
             // 3. 按分号切分多条语句
             List<String> statements = SqlScriptUtils.splitStatements(cleanedSql);
+            // ===== 修复：处理空SQL情况 =====
+            if (statements.isEmpty()) {
+                log.debug("SQL为空，跳过解析");
+                ParseResult emptyResult = new ParseResult();
+                emptyResult.setGraph(graph);
+                emptyResult.setWarnings(warns);
+                emptyResult.setSkippedFragments(skipped.get());
+                emptyResult.setTraceId(traceId);
+                emptyResult.setParseMillis(0);
+                return emptyResult;
+            }
             if (dbType == null) {
                 //  测方言类型
                 dbType = SqlDialectDetector.detect(statements.get(0));
                 log.debug("解析语句，检测到方言: {}", dbType);
             }
-            // 4. ClickHouse SQL重写（将 INSERT INTO ... WITH ... SELECT 转换为标准语法）
-            if (dbType == DbType.clickhouse) {
-                List<String> rewrittenStatements = new ArrayList<>();
-                for (String stmt : statements) {
-                    rewrittenStatements.add(ClickHouseSqlRewriter.rewrite(stmt));
-                }
-                statements = rewrittenStatements;
-            }
-            if(!sqlStatementHandler.supports(dbType)){
-                throw new InternalParseException("数据库类型"+dbType.toString()+",暂不支持解析");
+//            // 4. ClickHouse SQL重写（将 INSERT INTO ... WITH ... SELECT 转换为标准语法）
+//            if (dbType == DbType.clickhouse) {
+//                List<String> rewrittenStatements = new ArrayList<>();
+//                for (String stmt : statements) {
+//                    rewrittenStatements.add(ClickHouseSqlRewriter.rewrite(stmt));
+//                }
+//                statements = rewrittenStatements;
+//            }
+            if (!sqlStatementHandler.supports(dbType)) {
+                throw new InternalParseException("数据库类型" + dbType.toString() + ",暂不支持解析");
             }
             // 5. 逐条解析语句
             for (String stmtText : statements) {
                 if (stmtText.trim().isEmpty()) {
                     continue;
                 }
-                parseStatement(stmtText,dbType, graph, warns, skipped);
+                parseStatement(stmtText, dbType, graph, warns, skipped);
             }
             // 6. 构建成功结果
             return buildResult(traceId, startTime, graph, warns, skipped.get());
@@ -90,15 +100,15 @@ public class DefaultSqlLineageParser implements SqlLineageParser {
             // 未预期异常：封装为InternalParseException
             log.error("SQL解析发生未预期异常, traceId={}", traceId, e);
             throw new InternalParseException(
-                "脚本解析异常: " + e.getMessage() + ", traceId=" + traceId, e);
+                    "脚本解析异常: " + e.getMessage() + ", traceId=" + traceId, e);
         }
     }
 
     /**
      * 解析单条SQL语句
      */
-    private void parseStatement(String stmtText, DbType dialect,LineageGraph graph,
-                                 List<LineageWarning> warns, AtomicInteger skipped) {
+    private void parseStatement(String stmtText, DbType dialect, LineageGraph graph,
+                                List<LineageWarning> warns, AtomicInteger skipped) {
         try {
             // 2. 使用Druid解析SQL
             List<SQLStatement> stmts = SQLUtils.parseStatements(stmtText, dialect);
@@ -113,7 +123,7 @@ public class DefaultSqlLineageParser implements SqlLineageParser {
         } catch (Exception e) {
             // 语句级异常：包装为InternalParseException并附带SQL片段信息
             throw new InternalParseException(
-                "解析失败: " + shortSql(stmtText) + " -> " + e.getMessage(), e);
+                    "解析失败: " + shortSql(stmtText) + " -> " + e.getMessage(), e);
         }
     }
 
@@ -128,7 +138,7 @@ public class DefaultSqlLineageParser implements SqlLineageParser {
      * 构建解析结果对象
      */
     private ParseResult buildResult(String traceId, long startTime,
-                                     LineageGraph graph, List<LineageWarning> warns, int skipped) {
+                                    LineageGraph graph, List<LineageWarning> warns, int skipped) {
         long elapsed = System.currentTimeMillis() - startTime;
 
         ParseResult result = new ParseResult();
@@ -139,12 +149,11 @@ public class DefaultSqlLineageParser implements SqlLineageParser {
         result.setParseMillis(elapsed);
 
         log.info("SQL解析完成, traceId={}, 表节点={}, 列节点={}, 警告={}, 跳过={}, 耗时={}ms",
-            traceId, graph.getTables().size(), graph.getColumns().size(),
-            warns.size(), skipped, elapsed);
+                traceId, graph.getTables().size(), graph.getColumns().size(),
+                warns.size(), skipped, elapsed);
 
         return result;
     }
-
 
 
 }

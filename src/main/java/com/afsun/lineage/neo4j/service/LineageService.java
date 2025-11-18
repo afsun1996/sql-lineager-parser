@@ -35,9 +35,9 @@ public class LineageService {
         // 1. 批量保存Table节点
         saveTables(new ArrayList<>(graph.getTables()));
         // 2. 批量保存Column节点和BELONGS_TO关系
-        saveColumnsWithBelongsTo(graph.getOwnerEdges());
+        saveColumnsWithBelongsTo(new ArrayList<>(graph.getOwnerEdges()));
         // 3. 批量创建LINKS_TO关系
-        saveColumnLineage(graph.getToEdges());
+        saveColumnLineage(new ArrayList<>(graph.getToEdges()));
     }
 
     private void saveTables(List<TableNode> tables) {
